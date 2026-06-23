@@ -4,12 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AutoLab.skill</title>
-  <meta name="description" content="AutoLab.skill：把作业要求、Word 模板、截图和提交包整理成可交付的报告文件。" />
+  <meta name="description" content="AutoLab.skill：五分钟帮你搞定复杂的实验报告。" />
   <style>
     :root {
       --bg: #0b0f19;
       --panel: #111827;
-      --panel-2: #151f32;
       --text: #f8fafc;
       --muted: #94a3b8;
       --line: rgba(148, 163, 184, 0.22);
@@ -33,11 +32,7 @@
     }
 
     a { color: inherit; }
-
-    .wrap {
-      width: min(1120px, calc(100% - 40px));
-      margin: 0 auto;
-    }
+    .wrap { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
 
     .nav {
       position: sticky;
@@ -69,10 +64,7 @@
     .nav-links a { text-decoration: none; }
     .nav-links a:hover { color: var(--text); }
 
-    .hero {
-      padding: 96px 0 72px;
-      text-align: center;
-    }
+    .hero { padding: 96px 0 72px; text-align: center; }
 
     .badge {
       display: inline-flex;
@@ -88,7 +80,7 @@
 
     h1 {
       margin: 22px auto 18px;
-      max-width: 920px;
+      max-width: 960px;
       font-size: clamp(44px, 8vw, 92px);
       line-height: 0.98;
       letter-spacing: -0.06em;
@@ -102,21 +94,22 @@
       font-weight: 650;
     }
 
-    .pain {
+    .tags {
       margin: 32px auto 0;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
       gap: 12px;
       max-width: 880px;
     }
 
-    .pain span {
+    .tags span {
       border: 1px solid var(--line);
       background: rgba(17, 24, 39, 0.72);
-      border-radius: 18px;
-      padding: 16px 14px;
+      border-radius: 999px;
+      padding: 10px 14px;
       color: #e2e8f0;
-      font-size: 16px;
+      font-size: 15px;
     }
 
     .actions {
@@ -145,15 +138,9 @@
       box-shadow: 0 16px 40px rgba(124, 58, 237, 0.35);
     }
 
-    .btn.secondary {
-      background: rgba(15, 23, 42, 0.76);
-      color: #e2e8f0;
-    }
+    .btn.secondary { background: rgba(15, 23, 42, 0.76); color: #e2e8f0; }
 
-    section {
-      padding: 58px 0;
-      border-top: 1px solid var(--line);
-    }
+    section { padding: 58px 0; border-top: 1px solid var(--line); }
 
     .section-head {
       display: flex;
@@ -170,11 +157,7 @@
       letter-spacing: -0.04em;
     }
 
-    .section-head p {
-      max-width: 520px;
-      margin: 0;
-      color: var(--muted);
-    }
+    .section-head p { max-width: 520px; margin: 0; color: var(--muted); }
 
     .grid {
       display: grid;
@@ -215,11 +198,7 @@
       background: #0f172a;
     }
 
-    .shot p {
-      margin: 12px 4px 4px;
-      color: #cbd5e1;
-      font-size: 14px;
-    }
+    .shot p { margin: 12px 4px 4px; color: #cbd5e1; font-size: 14px; }
 
     .quick {
       display: grid;
@@ -242,11 +221,7 @@
       box-shadow: var(--shadow);
     }
 
-    .note {
-      border-left: 4px solid var(--brand-2);
-      background: rgba(6, 182, 212, 0.08);
-    }
-
+    .note { border-left: 4px solid var(--brand-2); background: rgba(6, 182, 212, 0.08); }
     .repo-tree { color: #cbd5e1; }
 
     footer {
@@ -256,14 +231,11 @@
       border-top: 1px solid var(--line);
     }
 
-    @media (max-width: 980px) {
-      .grid { grid-template-columns: repeat(2, 1fr); }
-    }
-
+    @media (max-width: 980px) { .grid { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 860px) {
       .nav-links { display: none; }
       .hero { padding-top: 72px; }
-      .pain, .grid, .showcase, .quick { grid-template-columns: 1fr; }
+      .grid, .showcase, .quick { grid-template-columns: 1fr; }
       .section-head { display: block; }
       .section-head p { margin-top: 10px; }
       .wrap { width: min(100% - 28px, 1120px); }
@@ -285,13 +257,15 @@
 
   <main>
     <header class="hero wrap">
-      <div class="badge">skill · Word template · report delivery</div>
-      <h1>各种报告多得烦人？</h1>
-      <p>把作业要求、Word 模板、截图和提交包整理成可交付的报告文件。</p>
-      <div class="pain">
-        <span>排版麻烦得要死？</span>
-        <span>学校模板一堆格式？</span>
-        <span>截图图表还得自己整理？</span>
+      <div class="badge">skill · report · docx · ppt · video</div>
+      <h1>五分钟帮你搞定复杂的实验报告。</h1>
+      <p>Word 模板、运行截图、图表、答辩 PPT、实操视频和提交包，一起收掉。</p>
+      <div class="tags">
+        <span>实验报告</span>
+        <span>Word 模板</span>
+        <span>答辩 PPT</span>
+        <span>实操视频</span>
+        <span>提交包</span>
       </div>
       <div class="actions">
         <a class="btn primary" href="https://github.com/qiuy-collab/Auto-Lab.skill">Open GitHub</a>
