@@ -1,0 +1,51 @@
+{
+  "enabled": true,
+  "generator": "python_pil",
+  "diagrams": [
+    {
+      "name": "img_01",
+      "kind": "function_diagram",
+      "title": "Sports Meeting Management System Function Diagram",
+      "nodes": [
+        {
+          "id": "root",
+          "label": "Sports Meeting Management System",
+          "rect": [560, 120, 1040, 240],
+          "primary": true
+        },
+        {
+          "id": "login",
+          "label": "Login Management",
+          "rect": [80, 460, 340, 560]
+        },
+        {
+          "id": "project",
+          "label": "Project Management",
+          "rect": [450, 460, 710, 560]
+        },
+        {
+          "id": "register",
+          "label": "Registration Management",
+          "rect": [820, 460, 1080, 560]
+        },
+        {
+          "id": "query",
+          "label": "Score Query",
+          "rect": [1190, 460, 1450, 560]
+        }
+      ],
+      "edges": [
+        {
+          "from": "root",
+          "to": "login",
+          "from_anchor": "bottom",
+          "to_anchor": "top",
+          "route": "straight"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Use this route for course-design diagrams rather than screenshots."
+  ]
+}

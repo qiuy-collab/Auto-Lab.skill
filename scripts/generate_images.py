@@ -58,22 +58,34 @@ DEFAULT_POLICY = {
         "流程图",
         "架构图",
         "箭头标注",
-        "讲解框",
+        "讲解板",
         "说明面板",
         "悬浮标注",
         "poster",
         "callout",
         "annotation",
         "flowchart",
-        "diagram",
+        "diagram"
     ],
+    "ui_density": "low_information_density",
+    "crop_browser_chrome": True,
+    "forbid_localhost_or_dev_url": True
+}
+
+RESOLUTION_ALIASES = {
+    "2k_16_9": "2048x1152",
+    "2K 16:9": "2048x1152",
+    "4k_16_9": "3840x2160",
+    "4K 16:9": "3840x2160",
 }
 
 SCREENSHOT_NEGATIVE_PROMPT = (
     "Only show content that could naturally appear in a real screen capture. "
     "Do not add explanatory text panels, poster layouts, arrows, flowcharts, split-screen teaching boards, "
     "captions outside the program window, or decorative annotations. "
-    "Text may appear only where a real operating system, terminal, IDE, or application would naturally render it."
+    "Text may appear only where a real operating system, terminal, IDE, or application would naturally render it. "
+    "Show only the necessary information, keep a believable background, avoid high information density, avoid tiny unreadable text, "
+    "avoid localhost, 127.0.0.1, dev server URLs, browser address bars, tabs, and malformed UI details."
 )
 
 
@@ -83,11 +95,28 @@ def normalize_policy(config):
     return policy
 
 
+def normalize_resolution(value):
+    return RESOLUTION_ALIASES.get(str(value).strip(), str(value).strip())
+
+
 def lint_prompt(policy, image_name, prompt, mode):
     if mode != "screenshot_strict":
         return []
     lower_prompt = prompt.lower()
-    hits = [term for term in policy.get("forbidden_terms", []) if term.lower() in lower_prompt]
+    hits = []
+    for term in policy.get("forbidden_terms", []):
+        lower_term = term.lower()
+        if lower_term not in lower_prompt:
+            continue
+        idx = lower_prompt.find(lower_term)
+        window_start = max(0, idx - 60)
+        context_en = lower_prompt[window_start:idx]
+        context_zh = prompt[max(0, idx - 12):idx]
+        if any(marker in context_en for marker in [" no ", " not ", " without ", "do not add", "don't add", "avoid ", "avoid any "]):
+            continue
+        if any(marker in context_zh for marker in ["不要", "不要有", "不能有", "无"]):
+            continue
+        hits.append(term)
     return [f"{image_name}: screenshot_strict prompt contains forbidden term '{term}'" for term in hits]
 
 
@@ -98,6 +127,12 @@ def build_full_prompt(global_prompt, image_prompt, policy, mode):
     if image_prompt:
         parts.append(image_prompt.strip())
     if mode == "screenshot_strict" and policy.get("auto_append_negative", True):
+        if policy.get("ui_density") == "low_information_density":
+            parts.append("Keep the interface information density low. Show only necessary panels and a believable surrounding background.")
+        if policy.get("crop_browser_chrome", False):
+            parts.append("Do not show browser tabs, browser address bar, or system chrome unless absolutely necessary.")
+        if policy.get("forbid_localhost_or_dev_url", False):
+            parts.append("Do not show localhost, 127.0.0.1, dev server URLs, or temporary local addresses anywhere in the image.")
         parts.append(SCREENSHOT_NEGATIVE_PROMPT)
     return ", ".join(part for part in parts if part)
 
@@ -111,6 +146,7 @@ def generate_image_task(task_info):
     resolution = task_info["resolution"]
     max_retries = task_info.get("max_retries", 3)
     retry_delay = task_info.get("retry_delay", 2)
+    last_error = None
 
     for attempt in range(max_retries):
         try:
@@ -120,20 +156,22 @@ def generate_image_task(task_info):
                 output_dir=output_dir,
                 resolution=resolution,
                 filename=name,
-                silent=True,
+                silent=True
             )
             if result:
                 safe_print(f"[{index}/{total}] [OK] {name}")
-                return {"success": True, "name": name, "file": result}
+                return {"success": True, "name": name, "file": result, "error": None}
             safe_print(f"[{index}/{total}] [FAIL] {name}, retrying...")
+            last_error = "empty image generation result"
         except Exception as exc:
-            safe_print(f"[{index}/{total}] [ERROR] {name}: {exc}")
+            last_error = f"{type(exc).__name__}: {exc}"
+            safe_print(f"[{index}/{total}] [ERROR] {name}: {last_error}")
 
         if attempt < max_retries - 1:
             time.sleep(retry_delay)
 
     safe_print(f"[{index}/{total}] [FAILED] {name} exhausted retries")
-    return {"success": False, "name": name, "file": None}
+    return {"success": False, "name": name, "file": None, "error": last_error}
 
 
 def resolve_output_dir(config_path: Path, configured_output_dir: Optional[str]) -> Path:
@@ -153,11 +191,11 @@ def generate_from_config(config_path="examples/prompt_config.example.json"):
         config = json.load(handle)
 
     total_count = config.get("total_count", 1)
-    resolution = config.get("resolution", "1024x1024")
+    resolution = normalize_resolution(config.get("resolution", "1024x1024"))
     global_prompt = config.get("global_prompt", "")
     output_dir = resolve_output_dir(config_path, config.get("output_dir"))
     images = config.get("images", [])
-    max_workers = config.get("max_workers", 10)
+    max_workers = min(int(config.get("max_workers", 50)), 50, max(total_count, 1))
     max_retries = config.get("max_retries", 3)
     retry_delay = config.get("retry_delay", 2)
     policy = normalize_policy(config)
@@ -191,7 +229,7 @@ def generate_from_config(config_path="examples/prompt_config.example.json"):
                 "output_dir": str(output_dir),
                 "resolution": resolution,
                 "max_retries": max_retries,
-                "retry_delay": retry_delay,
+                "retry_delay": retry_delay
             }
         )
 
@@ -212,7 +250,7 @@ def generate_from_config(config_path="examples/prompt_config.example.json"):
             except Exception as exc:
                 task = future_to_task[future]
                 safe_print(f"[ERROR] task {task['name']} failed: {exc}")
-                results.append({"success": False, "name": task["name"], "file": None})
+                results.append({"success": False, "name": task["name"], "file": None, "error": f"{type(exc).__name__}: {exc}"})
 
             elapsed = time.time() - start_time
             success_count = sum(1 for item in results if item["success"])
@@ -234,6 +272,7 @@ def generate_from_config(config_path="examples/prompt_config.example.json"):
 
 
 def generate_image_single(prompt, output_dir=None, resolution="1024x1024", filename=None, silent=False):
+    resolution = normalize_resolution(resolution)
     base_url = env_vars.get("BASEURL")
     api_key = env_vars.get("APIKEY")
     if not base_url or not api_key:
@@ -247,14 +286,14 @@ def generate_image_single(prompt, output_dir=None, resolution="1024x1024", filen
     url = f"{base_url.rstrip('/')}/v1/images/generations"
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
     data = {
         "model": "gpt-image-2",
         "prompt": prompt,
         "n": 1,
         "size": resolution,
-        "quality": "medium",
+        "quality": "high"
     }
 
     if not silent:
@@ -296,30 +335,24 @@ def generate_filename_from_prompt(prompt):
         "了",
         "在",
         "是",
-        "我",
-        "有",
         "和",
-        "就",
-        "不",
-        "人",
-        "都",
-        "一",
+        "与",
+        "及",
+        "或",
+        "对",
+        "把",
+        "将",
+        "用",
         "一个",
-        "上",
-        "也",
-        "很",
-        "到",
-        "说",
-        "要",
-        "去",
-        "你",
-        "会",
-        "着",
-        "没有",
-        "看",
-        "好",
-        "自己",
-        "这",
+        "一种",
+        "进行",
+        "用于",
+        "系统",
+        "页面",
+        "界面",
+        "显示",
+        "真实",
+        "实验"
     }
     chinese_chars = re.findall(r"[\u4e00-\u9fff]+", prompt)
     english_words = re.findall(r"[a-zA-Z]+", prompt)

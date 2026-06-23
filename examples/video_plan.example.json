@@ -1,0 +1,38 @@
+{
+  "enabled": true,
+  "backend_priority": [
+    "pyav",
+    "opencv",
+    "ffprobe"
+  ],
+  "recording_priority": [
+    "mss_opencv",
+    "obs_websocket_or_cli",
+    "ffmpeg_gdigrab"
+  ],
+  "videos": [
+    {
+      "name": "operation_demo",
+      "input": ".\\evidence\\operation_demo.mp4",
+      "analysis_output": ".\\output\\operation_demo_analysis.json",
+      "sample_frames_dir": ".\\output\\video_frames\\operation_demo",
+      "max_frames": 5,
+      "purpose": "Analyze a recorded operation video and extract representative frames for report evidence."
+    }
+  ],
+  "recordings": [
+    {
+      "name": "screen_recording",
+      "output": ".\\output\\screen_recording.mp4",
+      "seconds": 10,
+      "fps": 15,
+      "monitor": 1,
+      "purpose": "Record a short local operation clip when screenshots are not enough."
+    }
+  ],
+  "notes": [
+    "PyAV is the preferred parser because it exposes FFmpeg containers, streams, codecs, packets, and frames.",
+    "OpenCV is the fallback for simple metadata, frame extraction, and mss-based screen recording.",
+    "OBS WebSocket/CLI remains the fallback when the assignment specifically requires recording through recording software."
+  ]
+}

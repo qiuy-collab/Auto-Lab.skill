@@ -1,169 +1,86 @@
 # DOCX Fill Rules
 
-本文档定义 Agent 在**填充阶段**（第 2~3 步）的详细行为规范与约束边界。
+This document defines how `auto-lab` should fill the report template while preserving the template shell.
 
----
+## Core policy
 
-## 一、事前准备（必做，不可跳过）
+- Preserve the template structure and styling intent.
+- Save to a new output file, never overwrite the source template.
+- For structural DOCX work, read and prefer `vendor/minimax-docx/SKILL.md` before writing scripts.
+- Use `python-docx` only for simple paragraph/table fills, simple body cleanup, inspection, or when minimax-docx is unavailable; record the fallback reason.
+- Plan figures before writing report text.
+- Default target tier is `excellent`.
+- Default report style is figure-supported, not pure-text.
+- Write from the perspective of a student submitting completed coursework, not from the perspective of an agent describing actions.
 
-在开始任何修改之前，Agent 必须先执行：
+## Route boundary
 
-1. **读取模板文档**，完整识别：
-   - 所有占位符位置（文字占位符、图片占位符 `{{img_XX}}`）
-   - 所有表格结构（行列数、合并单元格、表头）
-   - 所有图片占位位置
-   - 页眉页脚内容
-   - 段落数量概览
-2. **建立「字段 → 位置」映射表**：将 配文.md 中的每个章节/字段，精确映射到模板中的位置（章节标题、段落位置、表格单元格）
+Three figure routes may appear in the same report:
 
----
+- `ai_simulated`
+  - terminal screenshots
+  - command output screenshots
+  - software/system configuration screenshots
 
-## 二、可动范围（严格边界）
+- `browser_capture`
+  - local frontend page screenshots
+  - self-built app/web screenshots
+  - development software practice screenshots for the user's own app/web flow
 
-### 2.1 允许的操作
+- `diagram_assets`
+  - function diagrams
+  - flowcharts
+  - data flow diagrams
+  - ER diagrams
 
-| 操作 | 条件 |
-|------|------|
-| 替换占位符文本 | 仅替换占位符本身，保持样式 |
-| 在已有段落中追加/替换正文 | 必须继承该段落的样式 |
-| 将 `{{img_XX}}` 占位符替换为图片 | 保持该位置的段落格式 |
-| 填写表格单元格 | 继承单元格原有样式 |
+- `video_analysis` / `screen_recording`
+  - existing operation videos
+  - short local operation recordings
+  - representative frame evidence
 
-### 2.2 绝对禁止的操作（⚠️ 违反即失败）
+## Mandatory pre-work
 
-你绝对不能做以下事情：
+Before editing the document:
+1. Read the template and identify headings, body zones, tables, and figure anchors.
+2. Read `requirement_checklist.json` and confirm:
+   - target tier
+   - whether a pre-task is required
+   - whether images are required
+   - which routes are required
+   - minimum image count
+3. If a pre-task is required, complete it first and read `pre_task_plan.json`.
+4. If browser capture is required, read `browser_capture_plan.json`.
+5. If diagram assets are required, read `diagram_plan.json`.
+6. If video evidence is required, read `video_plan.json`.
+7. If a filled reference document must become a blank template, read `reference_template_cleanup.json` and `reference_template_cleanup_rules.md`.
+8. Ensure `配文.md`, `prompt_config.json`, `browser_capture_plan.json`, `diagram_plan.json`, `video_plan.json`, `reference_template_cleanup.json`, and `insert_config.json` are mutually consistent.
+9. When a pre-task exists, the report text must combine the original assignment requirements with the pre-task outputs rather than treating them separately.
+10. Before final validation, verify that AI screenshots, diagram assets, and video evidence have passed the visual review checklist.
+11. Review the template for directories, field-based tables of contents, sample text, formatting instructions, and reference wording that must be replaced or removed in the final output.
 
-1. ❌ 不能把 Word 内容复制出来重新排版
-2. ❌ 不能用 Markdown、HTML 或纯文本重建 Word
-3. ❌ 不能修改模板整体设计（页边距、分栏、纸张大小、主题）
-4. ❌ 不能改变原有样式（字体、字号、颜色、行距、段落间距）
-5. ❌ 不能自动美化文档（添加装饰、改变配色、调整排版）
-6. ❌ 不能自行添加标题、说明、段落或图片（只能替换已有占位符）
-7. ❌ 不能删除模板中的任何固定内容（说明文字、提示、固定表格）
-8. ❌ 不能把图片随便插到文档末尾
-9. ❌ 不能因为内容太长就改变页面结构（如调小字体、加大页边距）
-10. ❌ **不能覆盖原模板文件**，必须保存为新文件
+## Figure rules
 
----
+- If the template already contains image placeholders, reuse them.
+- If not, place figures at planned semantic anchors.
+- Each figure should have:
+  - a lead-in sentence
+  - the image
+  - a caption
+  - a short analysis paragraph
 
-## 三、填充配文（第 2 步·路A）
+## Verification expectations
 
-### 3.1 执行方式
-
-- 使用参考 Skill：`vendor/minimax-docx/SKILL.md`
-- 操作对象：模板的**副本**（不直接修改原模板）
-- 输入：`配文.md`（含 `{{img_XX}}` 占位符）+ 模板 docx
-- 输出：填入文字后的 docx（占位符保留）
-
-### 3.2 样式继承（强制）
-
-1. 填写文字时，**必须继承原占位符所在位置的全部样式**：字体、字号、加粗/斜体、颜色、行距、段前段后间距、缩进、对齐方式
-2. 如果占位符在表格内 → 继承该单元格的样式
-3. 如果占位符在标题行 → 继承该标题的样式（含大纲级别）
-4. 不得通过"粘贴为纯文本"绕过样式继承
-
-### 3.3 占位符与内容匹配
-
-- `{{img_XX}}` 占位符：**原样保留**，不删除不替换，留待第 3 步处理
-- 文字内容按章节结构匹配：配文.md 的章节标题对应模板中的同名/相似标题，填入该章节下的正文区域
-- 如果模板某位置有明确的占位文本（如 `[此处填写实验名称]`）→ 尝试从配文中匹配填入
-- 如果无法精确匹配 → 跳过，不强行修改，记入「未填写」清单
-- 替换后确保段落不残留多余空行（除非原模板该位置有空行）
-
----
-
-## 四、AI 生图（第 2 步·路B）
-
-### 4.1 执行方式
-
-```bash
-python scripts/generate_images.py <提示词JSON路径>
-```
-
-### 4.2 注意事项
-
-- 确保 `.env` 中 API 密钥有效
-- 运行前确认 `output_dir` 目录存在
-- 生成完成后，逐张检查输出图片是否生成成功
-- 如果某张图生成失败（重试耗尽），记录到失败清单
-
----
-
-## 五、填充配图（第 3 步）
-
-### 5.1 执行方式
-
-- 使用参考 Skill：`vendor/minimax-docx/SKILL.md`
-- 输入：第 2 步产出的 docx（含 `{{img_XX}}` 占位符）+ 插入JSON + 图片文件
-- 输出：图片全部插入后的完整 docx
-
-### 5.2 替换规则
-
-1. 在 docx 中搜索所有匹配 `{{img_XX}}` 的占位符
-2. 对每个 key，在 插入JSON 的 `images` 中查找对应图片路径
-3. 删除占位符文本 → 在完全相同的位置插入图片
-4. 如果占位符映射缺失 → 保留占位符，记入「未填写」清单
-5. 如果图片文件不存在 → 保留占位符，记入「风险」清单
-
-### 5.3 图片插入约束（强制）
-
-- 必须插入到占位符所在的**原位置**（相同段落、相同上下文），不能随意移位
-- 图片宽度适配页面可用宽度，建议不超过页面正文宽度的 80%
-- 保持原始宽高比，不得拉伸变形
-- 图片对齐方式继承所在段落的对齐设置
-- 如果模板中有图片样式（边框、阴影、环绕方式），优先复用
-- **不能把所有图片堆到文档末尾**
-
----
-
-## 六、保存输出
-
-### 6.1 保存规则（强制）
-
-- **必须保存为新文件**，路径由用户在第 0 步指定（如 `output/实验报告.docx`）
-- **原模板文件不得有任何修改**
-- 保存后验证文件可正常打开
-
-### 6.2 交付清单（Agent 完成后必须输出）
-
-| 输出项 | 说明 |
-|--------|------|
-| 修改后的 Word 文件路径 | 完整绝对路径 |
-| 填写清单 | 列出了哪些字段被填写、填写到什么位置 |
-| 未找到/未填写/存在风险的位置说明 | 逐条列出，附原因 |
-| 模板结构完整性说明 | 简短说明是否保持了原模板的段落数量、表格数量、页眉页脚、整体结构 |
-
----
-
-## 七、质量检查（完成后必须自检）
-
-Agent 完成填充后，必须逐项自检以下内容：
-
-| 检查项 | 通过标准 |
-|--------|---------|
-| 段落数量 | 与原模板一致（不含新增的配文段落应大致匹配） |
-| 表格数量 | 与原模板一致，表格行列结构未变 |
-| 页眉页脚 | 内容与格式与原模板一致 |
-| 表格结构 | 无单元格合并/拆分被破坏 |
-| 样式继承 | 填入文字与周围文字样式一致 |
-| 图片位置 | 每张图都在指定占位符位置，无移位 |
-| 未替换占位符 | 不存在遗漏的 `{{...}}` 占位符（除非已记录为「未填写」） |
-| 内容溢出 | 无文字超出页面边界、分页异常、图片变形 |
-
-### 7.1 检查不通过的处理
-
-- 不自动修复，逐条列出问题
-- 调用 `AskUserQuestion` 询问用户处理方式
-
----
-
-## 八、异常处理
-
-| 异常 | 处理 |
-|------|------|
-| 配文.md 不存在 | 终止，报告给用户 |
-| 模板 docx 无法打开 | 终止，报告给用户 |
-| `scripts/generate_images.py` 全部失败 | 产出一份"纯文字版"报告，在交付清单中标记全部图片缺失 |
-| 插入JSON 缺失 | 跳过第 3 步，在交付清单中标记所有占位符为「未填充」 |
-| 部分图片缺失 | 完成能做的替换，缺失项记入「风险清单」 |
-| 内容过长导致溢出 | 不自行调整格式，标记到「风险说明」中 |
+The template-specific verify script should check at least:
+- no unresolved placeholders remain unless intentionally documented
+- the planned figure count is satisfied
+- route coverage is satisfied when multiple routes are required
+- video analysis/recording outputs exist when the checklist requires video evidence
+- filled-reference cleanup preserved cover/front matter and retained level-1/level-2 headings when required
+- pre-task results are reflected when the assignment depends on them
+- captions exist
+- figures are not dumped at the end without context
+- placeholder/sample text is removed
+- template formatting instructions and reference wording are removed when they are not part of the final report content
+- table-of-contents or directory areas are not silently left broken when the template expects them to be filled or updated
+- report narration stays in student voice instead of tool/agent voice
+- the template shell remains stable

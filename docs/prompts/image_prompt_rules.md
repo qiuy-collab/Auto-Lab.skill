@@ -1,211 +1,56 @@
-# 生成提示词 JSON 的提示词
+# Image Prompt Rules
 
-本文档定义 Agent 在**第 1 步生成 `prompt_config.json`** 时，撰写 AI 生图提示词的详细规范与约束。
+This document defines how `auto-lab` should write `prompt_config.json`.
 
-Agent 在生成之前，必须先：
-1. 阅读 `examples/prompt_config.example.json`，了解输出结构的字段格式（total_count、resolution、images 数组等）
-2. 阅读本文档，按以下规范撰写每个 `prompt` 和 `global_prompt`
+## Scope boundary
 
----
+`prompt_config.json` is only for the `ai_simulated` route.
 
-## 一、总提示词（global_prompt）规范
+Use it for:
+- terminal screenshots
+- command output screenshots
+- software / system configuration screenshots
 
-`global_prompt` 是所有图片共享的全局视觉约束，描述一个**统一的视觉环境**。同一 report 中同类型的图片，必须在这个统一环境下生成。
+Do not use it for:
+- local frontend page screenshots
+- self-built app/web product flows
+- development software practice screenshots for the user's own app/web project when the UI should reflect the local running build
+- function diagrams, flowcharts, data flow diagrams, or ER diagrams
 
-### 1.1 长度要求
+Those belong to `browser_capture_plan.json` or `diagram_plan.json`.
 
-- **最少 150 字（中文字符）**
-- 越详细越好，覆盖所有视觉维度
+## Planning order
 
-### 1.2 必须覆盖的维度
+Before writing prompts:
+1. Read the requirement document.
+2. Fill `requirement_checklist.json`.
+3. If the assignment depends on a pre-task, complete it first and absorb the outputs.
+4. Decide whether the run uses `ai_simulated`, `browser_capture`, `diagram_assets`, or a combination.
+5. Only write prompts for figures assigned to `ai_simulated`.
 
-| 维度 | 说明 | 示例 |
-|------|------|------|
-| 环境/场景 | 图片发生的物理或虚拟环境是什么 | "Linux 终端窗口，运行在 Ubuntu 22.04 桌面环境中" |
-| 桌面/背景 | 终端/窗口以外的背景是什么 | "深色 Gnome 桌面背景，带有模糊的代码编辑器窗口" |
-| 终端/窗口外观 | 窗口边框、标题栏、透明度、圆角等 | "暗色主题终端窗口，标题栏显示 'user@ubuntu:~/project'，窗口有轻微圆角和阴影" |
-| 字体/字号 | 终端内/图中文字的字体、大小 | "Monospace 等宽字体，字号约 12pt，代码高亮配色为 Solarized Dark" |
-| 配色方案 | 前景色、背景色、高亮色 | "终端背景 #1E1E1E，前景文字 #00FF00（绿色），注释 #6A9955，关键字 #569CD6" |
-| 光照/氛围 | 整体画面的色调、亮度、对比度 | "低饱和度冷色调，屏幕发光效果柔和，无强烈眩光" |
-| 设备外观（可选） | 如果图片展示的是物理设备 | "27 寸 4K 显示器，窄边框，屏幕占据画面 90%" |
+## Prompt quality rules
 
-### 1.3 质量通用后缀（附加在 global_prompt 末尾）
+- The goal is believable screenshot realism, not explainer collage style.
+- The whole image set should share one coherent environment.
+- Keep the background treatment consistent across the set unless the requirement explicitly needs different scenes.
+- Show only necessary information and keep a believable background.
+- Avoid high information density, tiny unreadable text blocks, and overloaded dashboards.
+- Do not expose `localhost`, `127.0.0.1`, browser address bars, tabs, or dev URLs unless the user explicitly needs them.
+- Do not expose AI origin through visible text such as `AI生成`, `示意图`, or similar.
+- Do not use poster / callout / diagram language for screenshot prompts.
 
-```
-高质量渲染，精美细节，画面干净无噪点，专业学术截图风格，无杂乱元素。对于截图类图片，只允许出现真实软件界面自然会显示的文字，禁止额外解释文字。
-```
+## Output contract
 
-### 1.4 示例
+`prompt_config.json` should:
+- match only the `ai_simulated` figures
+- keep names aligned with `配文.md` placeholders
+- never include browser-capture-only or diagram-only figures
+- stay free of comments and helper fields
 
-```
-Linux 终端窗口截图风格。运行环境为 Ubuntu 22.04 LTS，Gnome 桌面。终端使用暗色主题，
-背景色 #1E1E1E，前景文字为绿色 #00FF00，等宽字体 Monospace 12pt。终端窗口占据画面
-主体，标题栏显示当前路径。桌面背景为深色模糊处理，无其他应用程序干扰。窗口有轻微圆角
-和系统默认阴影。整体冷色调、低饱和度，学术技术文档风格，光照均匀柔和，无反光。高质量
-渲染，精美细节，画面干净无噪点，专业学术截图风格，无杂乱元素，无文字错误。
-```
+## Resolution and concurrency
 
----
-
-## 二、单图提示词（images[].prompt）规范
-
-每张图片的 `prompt` 字段必须在 global_prompt 的基础上，补充该图的**具体内容**。
-
-### 2.1 长度要求
-
-- **最少 80 字（中文字符）**
-- 总提示词（≥150） + 单图提示词（≥80） = 每张图实际生图时合并后的提示词 ≥230 字
-
-### 2.2 继承规则（强制）
-
-- **必须明确引用总提示词建立的视觉环境**。用"终端环境与上一张完全一致"、"保持相同的桌面背景和终端配色"等措辞，确保同类型图片不会互相独立。
-- 如果图片类型不同（如截图 vs 架构图 vs 代码流程图），需**在单图 prompt 中切换场景描述**，但仍继承总提示词的整体风格和质量标准。
-
-### 2.3 必须覆盖的维度
-
-| 维度 | 说明 |
-|------|------|
-| 图中具体内容 | 什么代码、什么命令、什么输出、什么图表 |
-| 内容在画面中的位置 | 代码在终端左侧？输出在右侧？图表居中？ |
-| 预期视觉效果 | 代码行数、输出长度、颜色标记、高亮行 |
-| 与全局环境的衔接 | 明确"同一终端环境"，关联 global_prompt |
-
-### 2.4 同类型图片一致性规则（⚠️ 最关键）
-
-**同一类型的图片（如均为终端截图、均为代码运行结果），必须在同一视觉背景下展示，不能相互独立。**
-
-具体要求：
-- 每张单图 prompt 开头必须声明"与 [前一张图] 使用完全相同的终端环境和桌面背景"
-- 第一张图的 prompt 声明"本图遵循 global_prompt 描述的全局视觉环境"
-- 终端窗口位置、大小、配色在不同截图中保持一致，只切换窗口内部显示的代码/命令内容
-
-### 2.5 截图类图片禁区
-
-如果目标是“真实截图”“实验截图”“程序界面截图”，prompt 中禁止出现以下导向词：
-
-- 流程图
-- 架构图
-- 讲解框
-- 说明面板
-- 悬浮标注
-- 箭头标注
-- 海报
-- poster
-- callout
-- annotation
-- flowchart
-- diagram
-
-这些词会显著提高模型生成“讲解型拼图”而非“真实截图”的概率。
-
-### 2.6 示例（与 1.4 的 global_prompt 配套）
-
-**✅ 好的 prompt：**
-
-```
-本图遵循 global_prompt 描述的 Ubuntu 22.04 暗色终端环境。终端中显示使用 gcc 编译
-snake.c 的完整过程。命令行显示 "gcc snake.c -o snake -lncurses"，
-编译成功无报错，光标在下一行闪烁等待输入。终端背景 #1E1E1E，
-绿色前景文字。窗口中约有 15 行输出，包含编译命令和链接信息。与 global_prompt
-环境完全一致。
-```
-
-**✅ 第二张图 prompt：**
-
-```
-终端环境与上一张（编译截图）完全一致，同一 Ubuntu 桌面、同一暗色终端、同一窗口
-位置。终端中显示运行 ./snake 后的游戏初始界面。ncurses 绘制的游戏边框为绿色双线
-方框，蛇身由绿色 "#" 字符组成，初始长度 3 节位于画面中央偏左。右上角显示得分
-"Score: 0"。光标隐藏，画面等待用户按键开始。
-```
-
-**❌ 差的 prompt：**
-
-```
-一张贪吃蛇游戏的截图
-```
-
----
-
-## 三、适用场景分类指引
-
-Agent 应根据需求文档中涉及的图片类型，选择合适的 prompt 撰写策略：
-
-| 图片类型 | prompt 重点 | 环境描述 |
-|---------|------------|---------|
-| 终端/命令行截图 | 具体命令、完整输出、光标位置 | 必须继承 global_prompt 的终端环境 |
-| 代码片段/源码展示 | 语法高亮、行号、关键行高亮 | IDE/编辑器环境，继承 global_prompt 配色 |
-| 运行结果/输出截图 | 输出内容、格式对齐、颜色标记 | 与命令截图共用同一终端环境 |
-| 架构图/流程图 | 节点、连线、层次结构、标注文字 | 仅在需求明确要求图表时使用，不可误用于“截图”类需求 |
-| 数据表格/统计图 | 行列结构、数值、标题 | 学术图表风格，清晰易读 |
-| 设备/硬件照片 | 设备外观、接口、连接方式 | 切换为实物摄影风格 |
-| 软件界面/UI 截图 | 窗口布局、菜单、按钮状态 | 保持程序 UI 风格一致性 |
-
----
-
-## 四、输出格式规范
-
-Agent 生成的 `prompt_config.json` 必须严格符合以下结构（参考 `examples/prompt_config.example.json` 的字段格式），**只包含 `scripts/generate_images.py` 需要的字段，不含注释和说明字段**：
-
-```json
-{
-  "total_count": <图片总数>,
-  "resolution": "2560x1440",
-  "output_dir": "<输出目录绝对路径>",
-  "max_workers": 10,
-  "max_retries": 3,
-  "retry_delay": 2,
-  "image_policy": {
-    "default_mode": "screenshot_strict",
-    "auto_append_negative": true,
-    "fail_on_prompt_risk": true,
-    "forbidden_terms": ["流程图", "架构图", "poster", "callout", "annotation", "flowchart", "diagram"]
-  },
-  "global_prompt": "<≥150字的统一视觉环境描述>",
-  "images": [
-    {
-      "name": "img_01",
-      "mode": "screenshot_strict",
-      "prompt": "<≥80字，继承global_prompt的视觉环境>"
-    },
-    {
-      "name": "img_02",
-      "prompt": "<≥80字，与img_01保持同背景>"
-    }
-  ]
-}
-```
-
-### 关键约束
-
-1. `images[].name` 与 配文.md 中的 `{{img_XX}}` 占位符严格一一对应
-2. `resolution` 固定为 `"2560x1440"`
-3. `output_dir` 指向第 0 步用户指定的输出目录
-4. 文件只包含上述字段，**不得**包含 `_comment`、`_note`、`_instruction` 等说明性字段
-5. JSON 语法必须合法，可被 Python `json.load()` 直接解析
-6. 若 `mode` 为 `screenshot_strict`，不得在 prompt 中包含截图禁区词
-
----
-
-## 五、生成流程（Agent 执行顺序）
-
-1. **阅读需求文档**，统计需要多少张图、各是什么类型
-2. **阅读 `examples/prompt_config.example.json`**，确认输出结构
-3. **阅读本文档**，理解 prompt 撰写规范
-4. **先写 global_prompt**：≥150 字的统一视觉环境描述（按 1.2 维度逐一覆盖）
-5. **再写每个 images[].prompt**：≥80 字/张，首张声明遵循 global_prompt，后续声明与前面的图同背景（按 2.4 规则）
-6. **自检**：同一类型的图片 prompt 是否都关联了统一背景？是否避免了"相互独立"的写法？
-7. **输出**：生成 `prompt_config.json`，保存到输出目录
-
----
-
-## 六、反面案例（Agent 应避免的错误）
-
-| 错误 | 说明 | 后果 |
-|------|------|------|
-| global_prompt 太短或空洞 | 如仅写"高质量，精美细节" | 所有图风格不统一 |
-| 单图 prompt 未继承 global_prompt | 如"一张小狗照片"，完全独立 | 同类型图背景、配色不一致 |
-| 不声明"与上一张环境一致" | 每张 prompt 都重新描述环境 | 大模型可能生成不同背景的图 |
-| prompt 过于简短 | <80 字，信息不足 | 大模型自由发挥，偏离需求 |
-| 图片类型切换不说明 | 从截图突然到架构图，没有环境过渡 | 风格割裂，报告不协调 |
-| 输出 JSON 含注释/额外字段 | 加了 `_comment`、`_note` 等 | `scripts/generate_images.py` 可能解析失败 |
+- Use `2048x1152` for `2K 16:9`.
+- Use `3840x2160` for `4K 16:9`.
+- Do not assume maximum concurrency is supported upstream.
+- Test 2K/4K 16:9 with `scripts/test_image_concurrency.py` when a batch run will be expensive or time-sensitive.
+- If high concurrency fails, reduce to the highest passing worker count and record whether the failure came from upstream API rejection, timeout/rate limits, or a local script/config issue.

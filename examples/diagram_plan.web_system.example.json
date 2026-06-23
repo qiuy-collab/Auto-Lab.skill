@@ -1,0 +1,72 @@
+{
+  "enabled": true,
+  "generator": "python_pil",
+  "diagrams": [
+    {
+      "name": "img_01",
+      "kind": "function_diagram",
+      "title": "Web System Function Diagram",
+      "nodes": [
+        {
+          "id": "root",
+          "label": "Web System",
+          "rect": [560, 120, 1040, 240],
+          "primary": true
+        },
+        {
+          "id": "auth",
+          "label": "Authentication",
+          "rect": [80, 460, 340, 560]
+        },
+        {
+          "id": "content",
+          "label": "Content Module",
+          "rect": [450, 460, 710, 560]
+        },
+        {
+          "id": "orders",
+          "label": "Order Module",
+          "rect": [820, 460, 1080, 560]
+        },
+        {
+          "id": "admin",
+          "label": "Admin Module",
+          "rect": [1190, 460, 1450, 560]
+        }
+      ],
+      "edges": [
+        {
+          "from": "root",
+          "to": "auth",
+          "from_anchor": "bottom",
+          "to_anchor": "top",
+          "route": "straight"
+        },
+        {
+          "from": "root",
+          "to": "content",
+          "from_anchor": "bottom",
+          "to_anchor": "top",
+          "route": "straight"
+        },
+        {
+          "from": "root",
+          "to": "orders",
+          "from_anchor": "bottom",
+          "to_anchor": "top",
+          "route": "straight"
+        },
+        {
+          "from": "root",
+          "to": "admin",
+          "from_anchor": "bottom",
+          "to_anchor": "top",
+          "route": "straight"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Starter template for a common web management system report."
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "enabled": true,
+  "capability_check_required": true,
+  "startup_command": "npm run dev",
+  "startup_cwd": "C:\\Users\\ASUS\\Desktop\\my-project",
+  "base_url": "http://127.0.0.1:3000",
+  "target_kind": "frontend_or_self_built_app",
+  "screenshots": [
+    {
+      "name": "img_05",
+      "heading": "3.2 Frontend Page Demo",
+      "url_path": "/login",
+      "full_url": "http://127.0.0.1:3000/login",
+      "purpose": "frontend_page_or_self_built_app_flow",
+      "scope": "local_frontend_page",
+      "wait_after_actions_ms": 800,
+      "actions": [
+        {
+          "type": "goto",
+          "value": "/login"
+        },
+        {
+          "type": "fill",
+          "selector": "#username",
+          "value": "student-demo"
+        },
+        {
+          "type": "fill",
+          "selector": "#password",
+          "value": "123456"
+        },
+        {
+          "type": "click",
+          "selector": "#loginBtn"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Only use this file for local frontend pages or self-built app/web screenshots.",
+    "Do not use this route for terminal or software configuration figures.",
+    "Prefer a concrete page URL such as /login or /index.html instead of relying on a bare server root.",
+    "Relative goto values are allowed and will be resolved against base_url."
+  ]
+}
