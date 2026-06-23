@@ -1,89 +1,407 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auto Lab - AI 实验报告自动填写工具</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-        .hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 80px 20px; text-align: center; }
-        .hero h1 { font-size: 3rem; margin-bottom: 20px; }
-        .hero p { font-size: 1.2rem; max-width: 600px; margin: 0 auto 30px; opacity: 0.9; }
-        .btn { display: inline-block; padding: 12px 30px; background: white; color: #667eea; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 10px; }
-        .btn:hover { opacity: 0.9; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 60px 20px; }
-        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
-        .feature { padding: 30px; border: 1px solid #eee; border-radius: 10px; }
-        .feature h3 { color: #667eea; margin-bottom: 15px; }
-        .workflow { background: #f8f9fa; }
-        .workflow pre { background: #333; color: #fff; padding: 20px; border-radius: 10px; overflow-x: auto; }
-        .footer { background: #333; color: white; text-align: center; padding: 30px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoLab.skill</title>
+  <meta name="description" content="AutoLab.skill：把作业要求、Word 模板、截图和提交包整理成可交付的报告文件。" />
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --panel: #111827;
+      --panel-2: #151f32;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --line: rgba(148, 163, 184, 0.22);
+      --brand: #7c3aed;
+      --brand-2: #06b6d4;
+      --code: #020617;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(124, 58, 237, 0.28), transparent 34%),
+        radial-gradient(circle at 80% 10%, rgba(6, 182, 212, 0.20), transparent 30%),
+        var(--bg);
+      line-height: 1.7;
+    }
+
+    a { color: inherit; }
+
+    .wrap {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(18px);
+      background: rgba(11, 15, 25, 0.72);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .nav-inner {
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .logo {
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .hero {
+      padding: 96px 0 72px;
+      text-align: center;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(17, 24, 39, 0.7);
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+
+    h1 {
+      margin: 22px auto 18px;
+      max-width: 920px;
+      font-size: clamp(44px, 8vw, 92px);
+      line-height: 0.98;
+      letter-spacing: -0.06em;
+    }
+
+    .hero p {
+      max-width: 760px;
+      margin: 0 auto;
+      color: #cbd5e1;
+      font-size: clamp(18px, 2.8vw, 26px);
+      font-weight: 650;
+    }
+
+    .pain {
+      margin: 32px auto 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      max-width: 880px;
+    }
+
+    .pain span {
+      border: 1px solid var(--line);
+      background: rgba(17, 24, 39, 0.72);
+      border-radius: 18px;
+      padding: 16px 14px;
+      color: #e2e8f0;
+      font-size: 16px;
+    }
+
+    .actions {
+      margin-top: 34px;
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 20px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .btn.primary {
+      border: none;
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      box-shadow: 0 16px 40px rgba(124, 58, 237, 0.35);
+    }
+
+    .btn.secondary {
+      background: rgba(15, 23, 42, 0.76);
+      color: #e2e8f0;
+    }
+
+    section {
+      padding: 58px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 26px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 52px);
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+    }
+
+    .section-head p {
+      max-width: 520px;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: rgba(17, 24, 39, 0.72);
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .showcase {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .shot {
+      border: 1px solid var(--line);
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 24px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .shot img {
+      width: 100%;
+      display: block;
+      border-radius: 16px;
+      background: #0f172a;
+    }
+
+    .shot p {
+      margin: 12px 4px 4px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+
+    .quick {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    pre {
+      margin: 0;
+      padding: 22px;
+      overflow-x: auto;
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      color: #dbeafe;
+      font-size: 14px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      box-shadow: var(--shadow);
+    }
+
+    .note {
+      border-left: 4px solid var(--brand-2);
+      background: rgba(6, 182, 212, 0.08);
+    }
+
+    .repo-tree {
+      color: #cbd5e1;
+    }
+
+    footer {
+      padding: 32px 0 48px;
+      color: var(--muted);
+      text-align: center;
+      border-top: 1px solid var(--line);
+    }
+
+    @media (max-width: 860px) {
+      .nav-links { display: none; }
+      .hero { padding-top: 72px; }
+      .pain, .grid, .showcase, .quick { grid-template-columns: 1fr; }
+      .section-head { display: block; }
+      .section-head p { margin-top: 10px; }
+      .wrap { width: min(100% - 28px, 1120px); }
+    }
+  </style>
 </head>
 <body>
-    <div class="hero">
-        <h1>Auto Lab</h1>
-        <p>AI 驱动的大学实验报告自动填写工具。给 AI agent 一份需求文档 + 一个 Word 模板，它帮你把报告写好、截图配好、图表插好、格式调好，直接交。</p>
-        <a href="https://github.com/qiuy-collab/Auto-Lab.skill" class="btn">GitHub</a>
-        <a href="#features" class="btn">功能特性</a>
+  <nav class="nav">
+    <div class="wrap nav-inner">
+      <div class="logo">AutoLab.skill</div>
+      <div class="nav-links">
+        <a href="#fields">已验证领域</a>
+        <a href="#showcase">运行效果</a>
+        <a href="#quickstart">Quick Start</a>
+        <a href="https://github.com/qiuy-collab/Auto-Lab.skill">GitHub</a>
+      </div>
     </div>
-    
-    <div class="container" id="features">
-        <h2 style="text-align: center; margin-bottom: 40px;">功能特性</h2>
-        <div class="features">
-            <div class="feature">
-                <h3>三条截图路线</h3>
-                <p><strong>ai_simulated</strong>: AI 生成逼真的终端、IDE、配置截图</p>
-                <p><strong>browser_capture</strong>: 本地浏览器截图（自己的前端页面）</p>
-                <p><strong>diagram_assets</strong>: 流程图、ER 图、数据流图自动生成</p>
-            </div>
-            <div class="feature">
-                <h3>模板安全填充</h3>
-                <p>保留模板结构，清理占位符和格式指令，用学生口吻重写内容</p>
-            </div>
-            <div class="feature">
-                <h3>预任务支持</h3>
-                <p>自动检测是否需要先完成代码、数据等预任务，再写报告</p>
-            </div>
-            <div class="feature">
-                <h3>40+ 验收检查</h3>
-                <p>内置模板完整性、目录、正文质量、图例、交付包等全面检查</p>
-            </div>
-            <div class="feature">
-                <h3>一键打包交付</h3>
-                <p>自动生成 submit/ 文件夹 + submit.zip，代码/数据/报告完整交付</p>
-            </div>
-            <div class="feature">
-                <h3>Agent 友好</h3>
-                <p>标准化工作流，Agent Skills Standard 兼容，支持多种 runtime</p>
-            </div>
+  </nav>
+
+  <main>
+    <header class="hero wrap">
+      <div class="badge">skill · Word template · report delivery</div>
+      <h1>各种报告多得烦人？</h1>
+      <p>把作业要求、Word 模板、截图和提交包整理成可交付的报告文件。</p>
+      <div class="pain">
+        <span>排版麻烦得要死？</span>
+        <span>学校模板一堆格式？</span>
+        <span>截图图表还得自己整理？</span>
+      </div>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/qiuy-collab/Auto-Lab.skill">Open GitHub</a>
+        <a class="btn secondary" href="#quickstart">复制初始化提示词</a>
+      </div>
+    </header>
+
+    <section id="fields">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>已用 skills 验证过哪些领域</h2>
+          <p>不是空写介绍，下面这些方向已经按 skill 流程跑过或整理过。</p>
         </div>
+        <div class="grid">
+          <div class="card"><h3>数据分析实验报告</h3><p>数据生成、清洗、分析、图表输出、报告整理。</p></div>
+          <div class="card"><h3>Linux / 操作系统实操</h3><p>命令步骤、终端截图、实验步骤和结果说明。</p></div>
+          <div class="card"><h3>Python / Java / Web</h3><p>代码、运行结果、页面截图和课程设计报告。</p></div>
+          <div class="card"><h3>管理系统课程设计</h3><p>模块设计、系统说明、运行效果和提交文件。</p></div>
+          <div class="card"><h3>数据库设计</h3><p>ER 图、流程图、表结构和实验报告整理。</p></div>
+          <div class="card"><h3>Word 模板填写</h3><p>保留模板结构，插图、图注、正文和提交包一起处理。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="showcase">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>运行效果</h2>
+          <p>下面是《大数据处理技术》课程大作业示例：报告、代码、数据、图表和交付文件都已整理好。</p>
+        </div>
+        <div class="showcase">
+          <div class="shot">
+            <img src="https://raw.githubusercontent.com/qiuy-collab/Auto-Lab.skill/master/examples/big-data-processing-report/%E6%95%88%E6%9E%9C%E5%9B%BE/%E7%94%9F%E6%88%90%E7%9A%84%E6%96%87%E6%A1%A3%E6%88%AA%E5%9B%BE.png" alt="生成的文档截图" />
+            <p>生成的 Word 报告截图</p>
+          </div>
+          <div class="shot">
+            <img src="https://raw.githubusercontent.com/qiuy-collab/Auto-Lab.skill/master/examples/big-data-processing-report/%E6%95%88%E6%9E%9C%E5%9B%BE/%E4%BA%A4%E4%BB%98%E6%96%87%E4%BB%B6.png" alt="交付文件" />
+            <p>最终交付文件夹</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="quickstart">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Quick Start</h2>
+          <p>把右边这段丢给 AI Agent，让它先初始化仓库和环境。</p>
+        </div>
+        <div class="quick">
+          <div class="card note">
+            <h3>只做初始化</h3>
+            <p>README 不重复写完整流程。真正的执行规则在 <code>SKILL.md</code> 里，让 Agent 去读就行。</p>
+          </div>
+          <pre>请读取并初始化这个 skill：
+
+https://github.com/qiuy-collab/Auto-Lab.skill
+
+请只做初始化，不要开始生成报告。
+
+需要完成：
+1. 克隆仓库。
+2. 阅读 SKILL.md。
+3. 按 SKILL.md 检查运行环境。
+4. 自动安装基础依赖。
+5. 检查 vendor skills 是否完整。
+6. 运行环境检查脚本。
+7. 如果缺少 API Key、Word 模板、作业要求或其他文件，直接列出来让我补。</pre>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <h2>项目结构</h2>
+          <p>核心逻辑在 SKILL.md 和 scripts 里，示例放在 examples 里。</p>
+        </div>
+        <pre class="repo-tree">Auto-Lab.skill/
+├── SKILL.md
+├── README.md
+├── scripts/
+│   ├── init_run.py
+│   ├── run_workflow.py
+│   ├── generate_images.py
+│   └── package_submission.py
+├── examples/
+│   └── big-data-processing-report/
+├── docs/
+└── vendor/</pre>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      AutoLab.skill · MIT License · <a href="https://github.com/qiuy-collab/Auto-Lab.skill">GitHub</a>
     </div>
-    
-    <div class="container workflow">
-        <h2 style="text-align: center; margin-bottom: 40px;">工作流程</h2>
-        <pre>
-需求文档 + Word 模板
-       ↓
-  自动安装依赖 + 环境检查
-       ↓
-  分析需求 → 规划截图和图表路线
-       ↓
-  🔴 确认分析结果（agent 停下来等你）
-       ↓
-  生成 AI 截图 / 浏览器截图 / 流程图
-       ↓
-  填写模板 → 清理占位符 → 插入图片
-       ↓
-  🔴 检查输出文档（agent 停下来等你）
-       ↓
-  打包交付（submit/ 文件夹 + submit.zip）
-        </pre>
-    </div>
-    
-    <div class="footer">
-        <p>Auto Lab v2.0 | MIT License | <a href="https://github.com/qiuy-collab/Auto-Lab.skill" style="color: #667eea;">GitHub</a></p>
-    </div>
+  </footer>
 </body>
 </html>
