@@ -2,7 +2,6 @@
 
 **给 AI agent 一份需求文档 + 一个 Word 模板，它帮你把报告写好、截图配好、图表插好、格式调好，直接交。**
 
-受 [darwin-skill](https://github.com/alchaincyf/darwin-skill) 启发，将 Agent Skills 应用于大学实验报告自动化。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-2.0-blue.svg)](#whats-new-in-20)
