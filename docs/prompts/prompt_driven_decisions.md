@@ -21,10 +21,15 @@ This file defines which parts of `auto-lab` must be decided by the agent from th
 - Whether a filled reference document can be safely converted into a blank template, and what the real preserved/removed zones are.
 - What the final submission should contain.
 - Whether the output file names must follow assignment-specific naming.
-- What `配文.md` should emphasize, including where figures belong and how pre-task outputs should be woven into the narrative.
+- What `copywriting.md` should emphasize, including where figures belong and how pre-task outputs should be woven into the narrative.
 - Which image concurrency level is actually safe for the current upstream provider and resolution mix after probing 2K/4K 16:9.
 - Which template guidance text, placeholders, sample wording, TOC zones, and formatting reminders must be removed or retained in the final report.
 - Whether the final delivery passes a requirement-by-requirement acceptance review instead of only a file-existence check.
+- Whether "real screenshots" means AI-generated realistic images or actual local capture — the default is AI-generated unless the requirement explicitly refers to the user's own frontend/app.
+- What naming convention the submission archive should follow — default is `submit.zip` with no extra suffixes.
+- How to handle image generation failures — do not fall back to fake local screenshots; retry, reduce count, or switch routes.
+- Whether AI-generated screenshots need correct time displays — if a clock/time is visible, it must show the real current time.
+- Whether AI-generated code screenshots should use the project's actual source code — yes, include representative snippets in the prompt for visual fidelity.
 
 ## Should not be hard-coded by scripts
 

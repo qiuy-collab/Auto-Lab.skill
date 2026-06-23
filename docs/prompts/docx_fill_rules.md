@@ -53,7 +53,7 @@ Before editing the document:
 5. If diagram assets are required, read `diagram_plan.json`.
 6. If video evidence is required, read `video_plan.json`.
 7. If a filled reference document must become a blank template, read `reference_template_cleanup.json` and `reference_template_cleanup_rules.md`.
-8. Ensure `配文.md`, `prompt_config.json`, `browser_capture_plan.json`, `diagram_plan.json`, `video_plan.json`, `reference_template_cleanup.json`, and `insert_config.json` are mutually consistent.
+8. Ensure `copywriting.md`, `prompt_config.json`, `browser_capture_plan.json`, `diagram_plan.json`, `video_plan.json`, `reference_template_cleanup.json`, and `insert_config.json` are mutually consistent.
 9. When a pre-task exists, the report text must combine the original assignment requirements with the pre-task outputs rather than treating them separately.
 10. Before final validation, verify that AI screenshots, diagram assets, and video evidence have passed the visual review checklist.
 11. Review the template for directories, field-based tables of contents, sample text, formatting instructions, and reference wording that must be replaced or removed in the final output.

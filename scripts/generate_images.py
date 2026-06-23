@@ -376,11 +376,73 @@ def generate_filename_from_prompt(prompt):
     return f"{filename}_{int(time.time())}.png"
 
 
+def check_upstream():
+    """Test if the upstream image generation API is reachable."""
+    safe_print("=== upstream probe ===")
+    test_prompt = "generate a small dog image"
+    safe_print(f"Testing upstream connectivity with prompt: {test_prompt}")
+    result = generate_image_single(test_prompt, silent=True)
+    if result:
+        safe_print("[OK] Upstream image generation is available")
+        return True
+    else:
+        safe_print("[FAIL] Upstream image generation is NOT available")
+        return False
+
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="GPT Image 2 batch generator for auto-lab.",
+        epilog="If --config is omitted, uses examples/prompt_config.example.json or runs a single test prompt."
+    )
+    parser.add_argument(
+        "--config", "-c",
+        help="Path to prompt_config.json (default: examples/prompt_config.example.json)"
+    )
+    parser.add_argument(
+        "--check", action="store_true",
+        help="Test upstream API connectivity without generating images"
+    )
+    parser.add_argument(
+        "--prompt", "-p",
+        help="Single test prompt (used with --check or standalone test)"
+    )
+    return parser.parse_args()
+
+
+def check_upstream():
+    """Test if the upstream image generation API is reachable."""
+    test_prompt = "generate a small dog image"
+    safe_print(f"Testing upstream connectivity with prompt: {test_prompt}")
+    result = generate_image_single(test_prompt, silent=True)
+    if result:
+        safe_print("[OK] Upstream image generation is available")
+        return True
+    else:
+        safe_print("[FAIL] Upstream image generation is NOT available")
+        return False
+
+
 def main():
     safe_print("=== GPT Image 2 batch generator ===")
+    args = parse_args()
 
-    if len(sys.argv) > 1:
-        config_path = sys.argv[1]
+    if args.check:
+        ok = check_upstream()
+        raise SystemExit(0 if ok else 1)
+
+    if args.prompt:
+        safe_print(f"Test prompt: {args.prompt}")
+        result = generate_image_single(args.prompt)
+        if result:
+            safe_print(f"[SUCCESS] image saved: {result}")
+        else:
+            safe_print("[FAILED] image generation failed")
+        return
+
+    if args.config:
+        config_path = args.config
         safe_print(f"Using config file: {config_path}")
         generate_from_config(config_path)
         return

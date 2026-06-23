@@ -73,24 +73,42 @@ def package_submission(config_path: Path):
         raise SystemExit("submission_package.json is not enabled")
 
     output_zip = normalize_path(config_path.parent, config.get("output_zip", "submit.zip"))
+    output_folder = output_zip.parent / "submit"
     source_root, files = collect_files(config_path, config)
     if not files:
         raise SystemExit("submission_package.json did not resolve any files to package")
 
+    # Create submit/ folder
+    if output_folder.exists():
+        import shutil
+        shutil.rmtree(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+    for source, rel_name in files:
+        dest = output_folder / rel_name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy2(str(source), str(dest))
+
+    # Create submit.zip from submit/ folder
     output_zip.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for source, rel_name in files:
-            zf.write(source, rel_name)
+        for file_path in sorted(output_folder.rglob("*")):
+            if file_path.is_file():
+                arcname = str(file_path.relative_to(output_folder))
+                zf.write(file_path, arcname)
 
     manifest = {
         "source_root": str(source_root),
         "output_zip": str(output_zip),
+        "output_folder": str(output_folder),
         "file_count": len(files),
         "files": [{"source": str(source), "archive_path": rel_name, "size": os.path.getsize(source)} for source, rel_name in files],
     }
     manifest_path = output_zip.with_name(output_zip.stem + "_manifest.json")
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Submission package written: {output_zip}")
+    print(f"Submission folder written: {output_folder}")
+    print(f"Submission archive written: {output_zip}")
     print(f"Submission manifest written: {manifest_path}")
 
 

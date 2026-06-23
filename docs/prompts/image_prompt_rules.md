@@ -43,7 +43,7 @@ Before writing prompts:
 
 `prompt_config.json` should:
 - match only the `ai_simulated` figures
-- keep names aligned with `配文.md` placeholders
+- keep names aligned with `copywriting.md` placeholders
 - never include browser-capture-only or diagram-only figures
 - stay free of comments and helper fields
 

@@ -46,6 +46,6 @@ Before writing a diagram plan:
 
 `diagram_plan.json` should:
 - match only the `diagram_assets` figures
-- keep names aligned with `配文.md` placeholders
+- keep names aligned with `copywriting.md` placeholders
 - never include AI screenshot figures or browser-capture figures
 - stay free of comments and helper fields

@@ -10,6 +10,19 @@ Use this when the assignment requires a final hand-in archive.
 - The final archive name must be `submit.zip` unless the user explicitly requires a different name.
 - Before delivery, list every required deliverable and review them one by one for correctness, completeness, and presentation quality.
 
+## Output format
+
+- Produce BOTH a `submit/` folder AND a `submit.zip` in the output directory.
+- The `submit/` folder allows easy inspection and modification before final delivery.
+- The `submit.zip` is the archive for hand-in.
+
+## Naming rules
+
+- The archive must be named `submit.zip`.
+- Do NOT add extra suffixes like "AI版", "完整版", "final", "v2", or any other labels.
+- If the source document specifies a different name, use that name and set `allow_custom_zip_name=true` in `submission_package.json`.
+- When no naming is specified in the source document, always use `submit.zip`.
+
 ## Typical packaging decisions
 
 - If the prompt says to submit only the final report, include only the final `.docx`.

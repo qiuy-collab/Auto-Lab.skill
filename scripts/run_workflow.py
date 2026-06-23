@@ -381,7 +381,7 @@ def validate_workflow(workflow):
 
     output.append(f"Pre-task enabled: {pre_task_plan.get('enabled')}")
     output.append(f"Pre-task completed: {pre_task_plan.get('completed')}")
-    output.append(f"Placeholders in 配文.md: {len(copy_keys)}")
+    output.append(f"Placeholders in copywriting.md: {len(copy_keys)}")
     output.append(f"Images in prompt_config.json: {len(prompt_keys)}")
     output.append(f"Images in insert_config.json: {len(insert_keys)}")
     output.append(f"Template manifest: {template_manifest_path.name}")
@@ -421,7 +421,7 @@ def validate_workflow(workflow):
                 f"Planned figure count below checklist minimum. Need at least {minimum_image_count}, found {len(planned_figures)}"
             )
         if len(copy_keys) == 0 and all(not fig.get("heading") for fig in planned_figures):
-            raise SystemExit("Images are required, but 配文.md has no placeholders and planned_figures has no non-empty headings/anchors")
+            raise SystemExit("Images are required, but copywriting.md has no placeholders and planned_figures has no non-empty headings/anchors")
 
     if browser_capture_required:
         if not browser_capture_runtime_available():
@@ -511,7 +511,22 @@ def update_insert_config_from_diagram_plan(workflow, diagram_plan, insert_config
 def run_generate_py(workflow):
     root = Path(__file__).resolve().parent
     prompt_config_path = Path(workflow["prompt_config_path"])
-    subprocess.run([sys.executable, str(root / "generate_images.py"), str(prompt_config_path)], check=True)
+
+    # B7: Test upstream before batch
+    print("Testing upstream image generation capability...")
+    check_result = subprocess.run(
+        [sys.executable, str(root / "generate_images.py"), "--check"],
+        capture_output=True, text=True
+    )
+    if check_result.returncode != 0:
+        raise SystemExit(
+            "Upstream image generation is not available. "
+            "Fix the API connection before running batch generation.\n"
+            f"Error: {check_result.stderr or check_result.stdout}"
+        )
+    print("Upstream check passed, starting batch generation...")
+
+    subprocess.run([sys.executable, str(root / "generate_images.py"), "--config", str(prompt_config_path)], check=True)
 
 
 def run_browser_capture(workflow):
@@ -661,6 +676,14 @@ FORBIDDEN_IN_OUTPUT = [
     "TODO：",
     "示例内容",
     "样例",
+    "dashboard",
+    "welcome",
+    "placeholder",
+    "sample data",
+    "字号要求",
+    "行距要求",
+    "格式要求",
+    "字体要求",
 ]
 FORBIDDEN_IN_OUTPUT_RE = re.compile(
     "|".join(re.escape(t) for t in FORBIDDEN_IN_OUTPUT),
@@ -709,7 +732,7 @@ def gate_init(workflow: dict, output_dir: Path, checklist: dict) -> tuple:
         "requirement_checklist.json",
         "requirement_analysis.json",
         "pre_task_plan.json",
-        "配文.md",
+        "copywriting.md",
         "prompt_config.json",
         "browser_capture_plan.json",
         "diagram_plan.json",
@@ -894,22 +917,22 @@ def gate_evidence(workflow: dict, checklist: dict, requirement_analysis: dict) -
             if not vp.get("videos") and not vp.get("recordings"):
                 errors.append("[Gate 3/W] video_plan.json 的 videos 和 recordings 均为空")
 
-    # 交叉检查：配文.md 的 placeholder 数量 >= minimum_image_count
+    # 交叉检查：copywriting.md 的 placeholder 数量 >= minimum_image_count
     images_required = bool(checklist.get("images_required", False))
     if images_required:
-        copywriting_path = output_dir / "配文.md"
+        copywriting_path = output_dir / "copywriting.md"
         if copywriting_path.exists():
             placeholders = placeholder_keys(copywriting_path)
             min_count = int(checklist.get("minimum_image_count", 0))
             if len(placeholders) < min_count:
                 errors.append(
-                    f"[Gate 3] 配文.md 中只有 {len(placeholders)} 个占位符，"
+                    f"[Gate 3] copywriting.md 中只有 {len(placeholders)} 个占位符，"
                     f"但 checklist 要求至少 {min_count} 张图"
                 )
             if len(placeholders) == 0:
                 planned = checklist.get("planned_figures", [])
                 if not any(fig.get("heading") for fig in planned):
-                    errors.append("[Gate 3] 配文.md 无占位符且 planned_figures 无 heading/锚点")
+                    errors.append("[Gate 3] copywriting.md 无占位符且 planned_figures 无 heading/锚点")
 
     # 图片路线总数与 planned_figures 的一致性
     planned = checklist.get("planned_figures", [])
@@ -1011,16 +1034,16 @@ def gate_assembly(workflow: dict, checklist: dict) -> tuple:
     output_dir = Path(workflow.get("output_dir", "."))
     output_docx = Path(workflow.get("output_docx", ""))
 
-    # AE: 配文.md 不能还是默认 stub
-    copywriting_path = output_dir / "配文.md"
+    # AE: copywriting.md 不能还是默认 stub
+    copywriting_path = output_dir / "copywriting.md"
     if copywriting_path.exists():
         content = copywriting_path.read_text(encoding="utf-8")
         if "先完成 requirement_analysis.json" in content and "不要直接 run" in content:
             errors.append(
-                "[Gate 5/AE] 配文.md 仍为初始化默认内容，Agent 必须写实际报告正文"
+                "[Gate 5/AE] copywriting.md 仍为初始化默认内容，Agent 必须写实际报告正文"
             )
-        if content.strip().startswith("# 配文") and len(content.strip().splitlines()) <= 10:
-            warnings.append("[Gate 5/AE] 配文.md 内容似乎过短，请确认已完成正文")
+        if content.strip().startswith("# Copywriting") and len(content.strip().splitlines()) <= 10:
+            warnings.append("[Gate 5/AE] copywriting.md 内容似乎过短，请确认已完成正文")
 
     # AE: insert_config.json 不能是空壳
     ic = _load_if_exists(output_dir / "insert_config.json") or {}
@@ -1122,11 +1145,28 @@ def gate_delivery(workflow: dict, checklist: dict) -> tuple:
     if not sp.get("include_paths"):
         errors.append("[Gate 6/AI] submission_package.json.include_paths 为空")
 
+    # Naming check: must be submit.zip
+    output_zip = sp.get("output_zip", "")
+    zip_name = Path(output_zip).name if output_zip else ""
+    if zip_name and zip_name.lower() != "submit.zip" and not sp.get("allow_custom_zip_name", False):
+        errors.append(
+            f"[Gate 6/AI] submission archive name must be 'submit.zip', got '{zip_name}'. "
+            f"Remove extra suffixes or set allow_custom_zip_name=true."
+        )
+
     # AK→AM: submit.zip 存在性
     submit_zip = output_dir / "submit.zip"
     if not submit_zip.exists():
         errors.append(
             f"[Gate 6/AM] submit.zip 不存在: {submit_zip}，"
+            f"请运行 'python scripts/run_workflow.py package --workflow <workflow.json>'"
+        )
+
+    # submit/ folder 存在性
+    submit_dir = output_dir / "submit"
+    if not submit_dir.exists():
+        warnings.append(
+            f"[Gate 6/AM] submit/ 文件夹不存在: {submit_dir}，"
             f"请运行 'python scripts/run_workflow.py package --workflow <workflow.json>'"
         )
 
@@ -1164,6 +1204,83 @@ _GATES = {
     "5": ("ASSEMBLY — 装配与清理", gate_assembly),
     "6": ("DELIVERY — 交付打包", gate_delivery),
 }
+
+
+def generate_delivery_review(workflow: dict, checklist: dict) -> dict:
+    """A10: Generate machine-checkable delivery_review.json."""
+    output_dir = Path(workflow.get("output_dir", "."))
+    output_docx = Path(workflow.get("output_docx", ""))
+
+    review = {
+        "status": "pending",
+        "checks": []
+    }
+
+    # Check 1: Output DOCX exists
+    docx_exists = output_docx.exists() if output_docx != Path("") else False
+    review["checks"].append({
+        "name": "output_docx_exists",
+        "passed": docx_exists,
+        "detail": str(output_docx) if docx_exists else "Output DOCX not found"
+    })
+
+    # Check 2: Images generated
+    images_dir = Path(workflow.get("images_dir", str(output_dir / "generated_images")))
+    planned = checklist.get("planned_figures", [])
+    ai_planned = [f for f in planned if f.get("source_mode") == "ai_simulated"]
+    browser_planned = [f for f in planned if f.get("source_mode") == "browser_capture"]
+    diagram_planned = [f for f in planned if f.get("source_mode") == "diagram_assets"]
+
+    for fig in ai_planned + browser_planned + diagram_planned:
+        name = fig.get("name", "?")
+        png_path = images_dir / f"{name}.png"
+        review["checks"].append({
+            "name": f"image_{name}",
+            "passed": png_path.exists(),
+            "detail": str(png_path) if png_path.exists() else f"Image not found: {name}"
+        })
+
+    # Check 3: Template scripts customized
+    docx_scripts = workflow.get("docx_scripts", {})
+    for script_name in ("fill", "insert", "verify"):
+        script_path = Path(docx_scripts.get(script_name, ""))
+        is_stub = False
+        if script_path.exists():
+            content = script_path.read_text(encoding="utf-8")
+            is_stub = "AUTO_LAB_TEMPLATE_SCRIPT_STUB = True" in content
+        review["checks"].append({
+            "name": f"script_{script_name}_customized",
+            "passed": not is_stub,
+            "detail": "Stub detected" if is_stub else "Customized"
+        })
+
+    # Check 4: Submission package
+    if checklist.get("submission_package_required", False):
+        submit_folder = output_dir / "submit"
+        submit_zip = output_dir / "submit.zip"
+        review["checks"].append({
+            "name": "submit_folder_exists",
+            "passed": submit_folder.exists(),
+            "detail": str(submit_folder) if submit_folder.exists() else "submit/ folder not found"
+        })
+        review["checks"].append({
+            "name": "submit_zip_exists",
+            "passed": submit_zip.exists(),
+            "detail": str(submit_zip) if submit_zip.exists() else "submit.zip not found"
+        })
+
+    # Overall status
+    all_passed = all(c["passed"] for c in review["checks"])
+    review["status"] = "pass" if all_passed else "fail"
+    review["total_checks"] = len(review["checks"])
+    review["passed_checks"] = sum(1 for c in review["checks"] if c["passed"])
+
+    # Write to file
+    review_path = output_dir / "delivery_review.json"
+    review_path.write_text(json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"Delivery review written: {review_path}")
+
+    return review
 
 
 def run_gates(workflow: dict, phase: str = "all") -> int:
@@ -1307,6 +1424,8 @@ def main():
         run_manifest_commands(workflow)
         if checklist.get("submission_package_required", False):
             run_submission_package(workflow)
+        # A10: Generate machine-checkable delivery review
+        generate_delivery_review(workflow, checklist)
         print("Workflow run finished.")
 
 

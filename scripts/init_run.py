@@ -34,6 +34,8 @@ def analyze_template(template_path: Path):
 
 def write_script_stub(path: Path, script_role: str):
     stub = f'''import argparse
+import json
+from pathlib import Path
 
 AUTO_LAB_TEMPLATE_SCRIPT_STUB = True
 
@@ -42,20 +44,32 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Template-specific {script_role} script for the current docx task.")
 '''
     if script_role == "fill":
-        stub += """    parser.add_argument("--template", required=True)
-    parser.add_argument("--copywriting", required=True)
-    parser.add_argument("--output", required=True)
+        stub += """    parser.add_argument("--template", required=True, help="Path to the template docx")
+    parser.add_argument("--copywriting", required=True, help="Path to copywriting.md")
+    parser.add_argument("--output", required=True, help="Path to the output docx")
+    parser.add_argument("--requirement-analysis", default=None, help="Path to requirement_analysis.json")
+    parser.add_argument("--pre-task-plan", default=None, help="Path to pre_task_plan.json")
+"""
+    elif script_role == "insert":
+        stub += """    parser.add_argument("--docx", required=True, help="Path to the docx to insert images into")
+    parser.add_argument("--insert-config", required=True, help="Path to insert_config.json")
+    parser.add_argument("--images-dir", default=None, help="Path to generated_images directory")
 """
     else:
-        stub += """    parser.add_argument("--docx", required=True)
-    parser.add_argument("--insert-config", required=True)
+        stub += """    parser.add_argument("--docx", required=True, help="Path to the docx to verify")
+    parser.add_argument("--insert-config", required=True, help="Path to insert_config.json")
 """
     stub += """    return parser.parse_args()
 
 
 def main():
     raise SystemExit(
-        "This is a template-specific script stub. Replace it with logic for the current template."
+        "This is a template-specific script stub. Replace it with logic for the current template.\\n"
+        "Read the template structure and customize this script to:\\n"
+        "  - fill: parse the template, fill in content from copywriting.md, respect template formatting\\n"
+        "  - insert: read insert_config.json, place images at the correct positions\\n"
+        "  - verify: check that all placeholders are filled and images are placed correctly\\n"
+        "Use vendor/minimax-docx/SKILL.md for complex DOCX operations."
     )
 
 
@@ -88,7 +102,7 @@ def main():
     checklist_path = output_dir / "requirement_checklist.json"
     requirement_analysis_path = output_dir / "requirement_analysis.json"
     pre_task_plan_path = output_dir / "pre_task_plan.json"
-    copywriting_path = output_dir / "配文.md"
+    copywriting_path = output_dir / "copywriting.md"
     prompt_config_path = output_dir / "prompt_config.json"
     browser_capture_plan_path = output_dir / "browser_capture_plan.json"
     diagram_plan_path = output_dir / "diagram_plan.json"
@@ -97,6 +111,7 @@ def main():
     submission_package_path = output_dir / "submission_package.json"
     insert_config_path = output_dir / "insert_config.json"
     template_manifest_path = output_dir / "template_manifest.json"
+    delivery_review_path = output_dir / "delivery_review.json"
     fill_script_path = task_scripts_dir / "fill_template.py"
     insert_script_path = task_scripts_dir / "insert_images.py"
     verify_script_path = task_scripts_dir / "verify_template.py"
@@ -132,6 +147,7 @@ def main():
         "blank_template_script": str((Path(__file__).resolve().parent / "prepare_blank_template.py").resolve()),
         "submission_package_script": str((Path(__file__).resolve().parent / "package_submission.py").resolve()),
         "image_concurrency_report_path": str((output_dir / "image_concurrency_report.json").resolve()),
+        "delivery_review_path": str(delivery_review_path),
         "docx_scripts": {
             "fill": str(fill_script_path),
             "insert": str(insert_script_path),
@@ -405,11 +421,15 @@ def main():
             "*.log"
         ],
         "flatten": False,
+        "allow_custom_zip_name": False,
         "prompt_driven_rule": "Do not guess blindly. Read the requirement/prompt, decide the exact files that need to be submitted, then update include_paths so the final archive is named submit.zip.",
         "notes": [
             "Use prompt-driven packaging: derive what to submit from the assignment requirement, not from a fixed global archive recipe.",
             "Default output name must be submit.zip unless the user explicitly requires a different archive name.",
-            "Do not zip the whole workspace by habit. Include only what the prompt/requirement actually asks for."
+            "Do not add extra suffixes like 'AI版', '完整版', 'final' to the zip name.",
+            "Also produce a submit/ folder alongside submit.zip for easy inspection and modification.",
+            "Do not zip the whole workspace by habit. Include only what the prompt/requirement actually asks for.",
+            "Naming must follow the source document requirements; do not add suffixes when none are specified."
         ]
     }
 
@@ -419,7 +439,7 @@ def main():
         "placements": {}
     }
 
-    copywriting = """# 配文
+    copywriting = """# Copywriting
 
 > 先完成 `requirement_analysis.json`，再更新 `requirement_checklist.json`。
 > 初始化默认是 planning_only，不要直接 run。

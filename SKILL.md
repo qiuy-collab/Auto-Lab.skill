@@ -1,13 +1,60 @@
 ---
 name: auto-lab
-description: Portable lab-report workflow for generating copywriting, AI experiment screenshots, local frontend screenshots, diagram/video assets, reference-template cleanup, and final DOCX delivery with scoring-first planning and template-safe insertion.
+description: "Portable lab-report workflow for generating copywriting, AI experiment screenshots, local frontend screenshots, diagram/video assets, reference-template cleanup, and final DOCX delivery with scoring-first planning and template-safe insertion. Use when the user asks about lab reports, course design reports, experiment reports, or docx template filling."
 ---
 
 # auto-lab
 
 Use this skill when the user wants a lab report generated from a requirement document and a Word template while preserving the template structure.
 
-The executable workflow currently expects a `.docx` template for `python-docx` processing. If the user only has `.doc`, convert it before running `init_run.py`.
+The executable workflow expects a `.docx` template for `python-docx` processing. If the user only has `.doc`, convert it before running `init_run.py`.
+
+## Environment setup (agent-automated)
+
+The agent MUST install all dependencies automatically before running any script. Do not ask the user to install anything manually.
+
+### Required dependencies (install silently)
+
+```bash
+pip install requests python-docx Pillow
+```
+
+### Optional dependencies (install when route requires)
+
+| Route | Install command |
+|-------|----------------|
+| `browser_capture` | `pip install playwright && playwright install chromium` |
+| `video_analysis` / `screen_recording` | `pip install av opencv-python numpy mss` |
+| `ai_simulated` | No extra pip install, but requires `.env` with `BASEURL` and `APIKEY` |
+
+### Auto-setup procedure
+
+1. Check if `python` is available. If not, report to user and stop.
+2. Run `pip install requests python-docx Pillow` silently.
+3. If `ai_simulated` route is planned, check `.env` exists and has `BASEURL`+`APIKEY`. If missing, copy `.env.example` to `.env` and ask the user to fill in the API key.
+4. If `browser_capture` route is planned, run `pip install playwright && playwright install chromium`.
+5. If video route is planned, run `pip install av opencv-python numpy mss`.
+6. After installs, run `powershell -ExecutionPolicy Bypass -File scripts/env_check.ps1` to verify.
+7. If env_check still reports FAIL after auto-install, report the specific failure to the user with the exact fix command. Only ask the user for manual intervention when auto-install cannot resolve it.
+
+**Rule**: Environment issues are the agent's responsibility to fix. Only ask the user for semantic decisions (route choice, content review, delivery sign-off), not for `pip install`.
+
+## Quick start
+
+```
+1. Auto-install dependencies (see "Environment setup" above)
+2. python scripts/init_run.py --requirements <req> --template <tpl.docx> --output-dir <dir> --output-docx-name <result.docx>
+3. Fill requirement_analysis.json → update requirement_checklist.json
+4. 🔴 STOP — show analysis to user for confirmation
+5. If pre-task needed → complete it → record in pre_task_plan.json
+6. Plan figures → write copywriting.md + prompt_config.json + insert_config.json
+7. python scripts/run_workflow.py gate --workflow <workflow.json>
+8. python scripts/generate_images.py --check (if AI images needed)
+9. python scripts/run_workflow.py images --workflow <workflow.json>
+10. python scripts/run_workflow.py run --workflow <workflow.json>
+11. 🔴 STOP — inspect output DOCX
+12. Write delivery_review.json → 🔴 STOP — user sign-off
+```
 
 ## Core behavior
 
@@ -44,67 +91,82 @@ When the requirement includes real software delivery work, read and apply these 
 - `vendor/frontend-design/SKILL.md` for production-grade frontend implementation quality
 - `vendor/webapp-testing/SKILL.md` for local web-app testing and verification
 
-## Workflow architecture
+If a vendor skill file is missing, report it as an error — do not silently skip.
+
+## Workflow diagram
 
 ```mermaid
 flowchart TD
-    A["Receive requirements + template + attachments"] --> B["Run env_check"]
-    B --> C["Initialize run directory with init_run.py"]
-    C --> D["Read requirement_analysis.json / requirement_checklist.json / template_manifest.json / pre_task_plan.json"]
-
-    D --> E{"Does the requirement explicitly demand real deliverables?"}
-    E -->|No| F["Skip implementation pre-task and plan the report directly"]
-    E -->|Yes| G["Classify the pre-task\ncode / scripts / datasets / project files / other concrete outputs"]
-
-    G --> H["Complete the real pre-task deliverables\nNo toy demos or placeholder code"]
-    H --> I{"Is this a frontend or web-app pre-task?"}
-    I -->|Yes| J["Initialize a git repository if needed"]
-    J --> K["Apply vendor/baseline-ui"]
-    K --> L["Apply vendor/frontend-design"]
-    L --> M["Build the real runnable project"]
-    M --> N["Write README or startup instructions"]
-    N --> O["Verify with vendor/webapp-testing"]
-    I -->|No| P["Complete non-frontend deliverables\nand include usage or run instructions"]
-
-    O --> Q["Record outputs and verification in pre_task_plan.json"]
-    P --> Q
-    F --> R["Analyze rubric, deliverables, and evidence requirements"]
+    A["Receive requirements + template"] --> B["Auto-install deps + env_check"]
+    B --> C["init_run.py"]
+    C --> D["Fill requirement_analysis.json"]
+    D --> E{"🔴 STOP — user confirms analysis"}
+    E -->|Confirmed| F{"Pre-task required?"}
+    E -->|Rejected| D
+    F -->|Yes| G["Complete pre-task"]
+    F -->|No| H["Analyze rubric + plan routes"]
+    G --> H
+    H --> I{"Which evidence routes?"}
+    I -->|AI| J["Write prompt_config.json"]
+    I -->|Browser| K["Write browser_capture_plan.json"]
+    I -->|Diagram| L["Write diagram_plan.json"]
+    I -->|Video| M["Write video_plan.json"]
+    J --> N["Probe upstream → generate AI images"]
+    K --> O["Run app + capture screenshots"]
+    L --> P["Generate diagram assets"]
+    M --> Q["Process video"]
+    N --> R["Visual review"]
+    O --> R
+    P --> R
     Q --> R
-
-    R --> S{"Which evidence routes are required?"}
-    S -->|AI screenshots| T["Write prompt_config.json\nKeep one coherent background and environment"]
-    S -->|Browser capture| U["Write browser_capture_plan.json"]
-    S -->|Diagrams| V["Write diagram_plan.json\nPrevent overlap, collisions, and crowded layouts"]
-    S -->|Video| W["Write video_plan.json"]
-
-    T --> X["Generate AI screenshots"]
-    U --> Y["Run local app and capture real screenshots"]
-    V --> Z["Generate diagram assets"]
-    W --> AA["Process recordings or extract frames"]
-
-    X --> AB["Perform visual review"]
-    Y --> AB
-    Z --> AB
-    AA --> AB
-
-    AB --> AC{"Does quality pass review?"}
-    AC -->|No| AD["Revise prompts, layout, or routing and regenerate"]
-    AD --> X
-    AC -->|Yes| AE["Write 配文.md and insert_config.json"]
-
-    AE --> AF["Fill the DOCX template"]
-    AF --> AG["Remove placeholder text, sample wording,\nformat instructions, and broken TOC residue"]
-    AG --> AH["Normalize the report into student voice"]
-
-    AH --> AI["Write submission_package.json from the requirement"]
-    AI --> AJ["Run requirement-by-requirement delivery review"]
-    AJ --> AK{"Is every deliverable correct,\ncomplete, and presentation-ready?"}
-    AK -->|No| AL["Return to the relevant stage and fix the gap"]
-    AL --> R
-    AK -->|Yes| AM["Package submit.zip and deliver final outputs"]
+    R --> S{"Quality pass?"}
+    S -->|No| T["Revise and regenerate"]
+    T --> N
+    S -->|Yes| U["Write copywriting.md + insert_config.json"]
+    U --> V["Fill DOCX template"]
+    V --> W["Clean: remove placeholders, instructions, sample text"]
+    W --> X["Normalize to student voice"]
+    X --> Y["🔴 STOP — inspect output DOCX"]
+    Y --> Z["Write delivery_review.json"]
+    Z --> AA["🔴 STOP — user sign-off"]
 ```
 
-## Hard boundary for image routes
+## Failure modes and recovery
+
+| Scenario | Trigger | First action | Fallback |
+|----------|---------|-------------|----------|
+| Python not found | `python` command fails | Report to user with install instructions | Stop — cannot proceed |
+| pip install fails | Network or permission error | Retry once with `--user` flag | Ask user to install manually |
+| `.env` missing or incomplete | No `BASEURL`/`APIKEY` | Copy `.env.example` to `.env` | Ask user to fill API key |
+| `env_check.ps1` reports FAIL | Missing module or tool | Auto-install the missing dependency | Report exact fix command to user |
+| `init_run.py` error | Template not `.docx` / path missing | Check file path and format, retry | Ask user to confirm file |
+| Upstream image API unreachable | `--check` returns failure | Wait 30s, retry once | Skip `ai_simulated`, use `diagram_assets` or text-only |
+| Single AI image fails | API timeout / empty response | Auto-retry 3 times (built into script) | Record failed image name, continue others, note in copywriting.md |
+| Visual review fails | localhost in image / density too high / overlaps | Revise prompt, regenerate | Skip that image, describe in text instead |
+| Template fill script errors | `task_scripts/*.py` exception | Check if stub was replaced, fix paths | Fall back to `python-docx` simple fill, record reason in `requirement_analysis.json -> template_strategy.notes` |
+| Video processing fails | PyAV/OpenCV both unavailable | Check ffmpeg installation | Skip video evidence, set `video_required=false` in checklist |
+| Submission packaging fails | Files in `include_paths` don't exist | Check paths, fix `submission_package.json` | Stop, ask user to confirm files |
+| Vendor skill file missing | `vendor/*/SKILL.md` not found | Report the specific missing skill name | Stop — do not silently skip |
+| DOCX output has leftover placeholders | Gate 5/AG check命中 | Locate and replace each one with actual content | Re-run fill script |
+
+## Anti-patterns — do NOT do these
+
+| # | Anti-pattern | Consequence | Correct approach |
+|---|-------------|-------------|-----------------|
+| 1 | Use local scripts to generate fake screenshots when AI generation fails | Teacher spots fake images instantly, direct point deduction | Retry, skip the image, or switch routes |
+| 2 | Overwrite the original template file | Template destroyed, no rollback | Always output to a new file |
+| 3 | Let scripts make semantic decisions (how many images, which route) | Scripts don't understand course requirements | Agent decides, scripts execute |
+| 4 | Use "dashboard" / "note" / "welcome" placeholder text in frontend code | Obviously template code | Use real content from the requirement document |
+| 5 | Skip vendor skills and write frontend directly | Violates baseline-ui constraints | Read vendor/*.md before writing code |
+| 6 | Deliver only `submit.zip` without a `submit/` folder | Hard to inspect and modify | Output both folder and zip |
+| 7 | Add "AI版" / "完整版" / "final" suffixes to zip filename | Non-standard naming | Use `submit.zip` uniformly |
+| 8 | Leave "请在此处填写" / "字号要求" template instructions in output DOCX | Teacher sees format rules instead of content | Remove all, keep only student content |
+| 9 | Agent self-evaluates after making changes | Optimistic bias (accuracy only 46.4%) | Use independent sub-agent or human review |
+| 10 | Run the entire workflow without any human confirmation | May go off-track irreversibly | Stop at every 🔴 checkpoint, wait for user |
+| 11 | Fabricate timestamps in AI-generated screenshots | Unrealistic images | Use real current time in prompt |
+| 12 | Use generic placeholder code in AI code/IDE screenshots | Screenshot doesn't match actual project | Pick core code snippets from the project for the prompt |
+
+## Image routes — hard boundaries
 
 ### Route 1: `ai_simulated`
 
@@ -113,11 +175,16 @@ Use AI-generated screenshots for:
 - command output screenshots
 - software / system configuration screenshots
 - generic tool-operation visuals where exact local UI fidelity is not required
+- IDE / code editor screenshots (when showing general coding environment)
+- database management tool screenshots (e.g. MySQL Workbench, Navicat general UI)
+- network/OS configuration panels
+
+**Critical rule**: When the requirement says "real software screenshots" or Chinese equivalent, it means AI-generated realistic screenshots by default — NOT local browser capture and NOT fake local script outputs. Only use `browser_capture` when the requirement explicitly refers to the user's own frontend/app pages.
 
 Do not use AI-generated screenshots for:
 - local frontend pages that should match the running project
 - self-built app/web product flows
-- development software practice screenshots for the user's own app or web project when the UI should reflect the actual local build
+- development software practice screenshots for the user's own app or web project
 - function diagrams, flowcharts, data flow diagrams, or ER diagrams
 
 ### Route 2: `browser_capture`
@@ -140,6 +207,8 @@ Use generated diagram assets for:
 - flowcharts
 - data flow diagrams
 - ER diagrams
+- database schema diagrams
+- system architecture diagrams (when specifically asked as diagrams, not as screenshots)
 
 Do not use diagram assets for:
 - terminal screenshots
@@ -147,92 +216,53 @@ Do not use diagram assets for:
 - local frontend page screenshots
 - published third-party product screenshots
 
-## Required order
+### AI image constraints
 
-1. Run environment check:
-   - `powershell -ExecutionPolicy Bypass -File scripts/env_check.ps1`
-2. Initialize a run directory:
-   - `python scripts/init_run.py --requirements <requirements> --template <template.docx> --output-dir <output_dir> --output-docx-name <result.docx>`
-3. Read the generated files:
-   - `workflow.json`
-   - `template_manifest.json`
-   - `requirement_checklist.json`
-   - `requirement_analysis.json`
-   - `pre_task_plan.json`
-   - `配文.md`
-   - `prompt_config.json`
-   - `browser_capture_plan.json`
-   - `diagram_plan.json`
-   - `video_plan.json`
-   - `reference_template_cleanup.json`
-   - `submission_package.json`
-   - `insert_config.json`
-   - `task_scripts/fill_template.py`
-   - `task_scripts/insert_images.py`
-   - `task_scripts/verify_template.py`
-4. Fill `requirement_analysis.json` first, then reflect those decisions into `requirement_checklist.json`.
-5. Decide:
-   - whether the assignment has a pre-task that must be completed first
-   - whether images are required
-   - which scoring items need evidence figures
-   - whether this run uses `ai_simulated`, `browser_capture`, `diagram_assets`, or a combination
-   - whether browser screenshot capability is available before continuing
-   - whether video evidence is required
-   - whether a filled reference document must be cleaned into a blank template
-   - whether the assignment requires a final submission package
-   - use `docs/prompts/pre_task_detection_rules.md` for the pre-task judgment
-6. If a pre-task is required, complete it first and record its outputs in `pre_task_plan.json`.
-   - For coding pre-tasks, initialize git before implementation if the workspace is not already a git repository.
-   - For frontend/web-app pre-tasks, read `vendor/baseline-ui/SKILL.md` and `vendor/frontend-design/SKILL.md` before writing code.
-   - For frontend/web-app verification, use `vendor/webapp-testing/SKILL.md` after implementation and record what was actually tested.
-   - Do not mark `pre_task_plan.json.completed = true` until the required deliverables, supporting docs, and basic verification evidence exist.
-7. Analyze the template and customize the task-specific docx scripts.
-8. Write `配文.md`, `prompt_config.json`, `browser_capture_plan.json`, `diagram_plan.json`, `video_plan.json`, `reference_template_cleanup.json`, `submission_package.json`, and `insert_config.json` as one coordinated set, using both the original requirement and the pre-task outputs when applicable.
-   - read `docs/prompts/prompt_driven_decisions.md` and treat requirement understanding as the source of truth for route choice, figure count, packaging scope, and submission contents
-   - For `ai_simulated`, every image set must keep one coherent environment, one believable background style, and one consistent visual tone unless the requirement explicitly needs different scenes.
-   - For `ai_simulated`, show only necessary information, keep a believable background, and avoid high information density.
-   - For `ai_simulated`, do not expose `localhost`, `127.0.0.1`, browser address bars, tabs, or dev URLs unless the user explicitly wants them.
-   - Use these standard 16:9 image sizes when the user requests high resolution:
-     - `2K 16:9`: `2048x1152`
-     - `4K 16:9`: `3840x2160`
-   - Keep `prompt_config.json -> max_workers` conservative until tested, then set it to the highest proven stable concurrency from `scripts/test_image_concurrency.py`. Start with 2K/4K 16:9 probes. If high concurrency fails, reduce to the highest passing worker count and record whether failures are API/upstream errors or local script errors.
-9. Perform visual review before validation:
-   - use `docs/prompts/visual_review_rules.md`
-   - if AI images are enabled, the agent must inspect readability, realism, background density, absence of localhost, and absence of malformed UI details
-   - if diagram assets are enabled, the agent must inspect line routing, spacing, overlaps, label readability, and whether each block has enough empty space to avoid collisions after rendering
-   - only after passing this check may `ai_visual_review_completed` or `diagram_visual_review_completed` be set to `true`
-10. Validate:
-   - `python scripts/run_workflow.py validate --workflow <workflow.json>`
-11. Generate enabled image/diagram routes:
-   - `python scripts/run_workflow.py images --workflow <workflow.json>`
-12. Process enabled video evidence:
-   - `python scripts/run_workflow.py video --workflow <workflow.json>`
-13. Build the submission package when required:
-   - `python scripts/run_workflow.py package --workflow <workflow.json>`
-14. Fill the docx and insert images through the template-specific scripts:
-   - `python scripts/run_workflow.py run --workflow <workflow.json>`
-15. Perform final delivery review against the requirement document:
-   - list every required deliverable from the assignment
-   - check each item one by one for correctness, completeness, and presentation quality
-   - confirm the report content, code outputs, assets, screenshots, diagrams, and packaged files are all requirement-aligned rather than merely present
-   - treat this review as mandatory before calling the task finished
+- AI-generated screenshots with clock/time displays must show the **real current time**. Note the current date/time before generating and include it in the prompt.
+- AI-generated code/IDE screenshots should use the **project's actual source code**. Pick the most representative snippet (main entry point, key class, or core logic) and include it in the prompt for visual fidelity.
+- If AI image generation fails, do NOT fall back to local fake screenshots. Retry, skip, or switch routes.
+- Before batch AI image generation, always probe upstream first: `python scripts/generate_images.py --check`
 
-## Important rules
+## Template filling rules
 
-- Do not write directly into the template file.
-- Do not use a generic docx filler as the default path.
-- Do not let scripts make semantic assignment decisions that depend on the requirement/prompt.
-- For DOCX creation, filling, formatting, template application, or structural cleanup, first read and prefer `vendor/minimax-docx/SKILL.md`.
-- Use `python-docx` only for simple paragraph/table fills, simple body cleanup, inspection, or when minimax-docx is unavailable; record the fallback reason in the run notes/config.
-- Pure-text delivery is not the default.
-- If the scoring rubric expects screenshots, figures, comparisons, command outputs, or evidence, images are mandatory.
-- Before any browser-capture run, check that local screenshot capability is available.
-- Use `diagram_assets` for database/system-design figures instead of screenshot routes.
-- For screenshot-like AI images, do not ask the model for diagrams, arrows, annotations, callouts, posters, split teaching boards, or visible AI-origin markers.
-- Do not leave template reference text, sample wording, formatting instructions, placeholder hints, or rubric prose in the final filled report unless the assignment explicitly requires them to remain.
-- If the template contains a generated table of contents, heading field, or visible directory area, the final output must be checked to ensure it is filled or updated as required by the template structure instead of silently left broken.
-- If a template's formatting instructions are not part of the final student submission content, remove them instead of preserving them as body text.
-- A deliverable is not accepted just because a file exists. It must match the assignment's requested content and be fit to show to a teacher, judge, or reviewer.
+When filling a DOCX template:
+- **Preserve**: template structure, heading hierarchy, page layout, table structure, styles, cover page, fixed text that is part of the assignment format (e.g. "课程名称：", "姓名：").
+- **Remove**: template instructions ("请在此处填写", "（此处替换为...）"), format reminders ("字号要求：小四", "行距：1.5倍"), sample/example content, placeholder hints, rubric excerpts pasted as body text, and TOC residue that is empty or broken.
+- **Replace**: all placeholder text like `[TODO]`, `占位`, `示例内容`, `样例` with actual student-content.
+- **Use** `scripts/template_adapter.py` as a reusable library: `find_placeholders()`, `replace_placeholder_text()`, `insert_image_after_paragraph()`, `remove_template_instructions()`, `validate_output()`, `write_fill_script()`.
+- The agent must customize `task_scripts/fill_template.py`, `insert_images.py`, and `verify_template.py` using `template_adapter` functions rather than writing everything from scratch.
+- The final report must not contain teacher-facing instructions or format specifications as body paragraphs.
+
+## Frontend code constraints
+
+When implementing frontend code as a pre-task:
+- Do not use placeholder text like "dashboard", "note", "placeholder", "示例", "样例" in visible UI.
+- Do not use generic template copy (e.g., "Welcome to your dashboard", "Note content here").
+- All visible text must be real content derived from the requirement.
+- Code must be runnable, requirement-aligned, and handoff-ready — not demo-grade.
+
+## Execution steps
+
+1. **Auto-install dependencies** (see "Environment setup" above). Run `env_check.ps1` to verify.
+2. **Initialize run directory**:
+   ```
+   python scripts/init_run.py --requirements <req> --template <tpl.docx> --output-dir <dir> --output-docx-name <result.docx>
+   ```
+3. **Read generated files**: `workflow.json`, `template_manifest.json`, `requirement_checklist.json`, `requirement_analysis.json`, `pre_task_plan.json`, `copywriting.md`, `prompt_config.json`, `browser_capture_plan.json`, `diagram_plan.json`, `video_plan.json`, `reference_template_cleanup.json`, `submission_package.json`, `insert_config.json`, `task_scripts/fill_template.py`, `task_scripts/insert_images.py`, `task_scripts/verify_template.py`.
+4. **Fill `requirement_analysis.json`**, then reflect decisions into `requirement_checklist.json`.
+5. 🔴 **STOP — show analysis to user for confirmation.** Do not continue until approved.
+6. **Decide routes**: pre-task required? images required? which routes? video? submission package? Use `docs/prompts/pre_task_detection_rules.md` for pre-task judgment.
+7. **If pre-task required**, complete it first. For frontend: init git, read vendor skills, build, write README, verify with webapp-testing. Record outputs in `pre_task_plan.json`.
+8. **Analyze template** and customize `task_scripts/fill_template.py`, `insert_images.py`, `verify_template.py`.
+9. **Write config files** as one coordinated set: `copywriting.md`, `prompt_config.json`, `browser_capture_plan.json`, `diagram_plan.json`, `video_plan.json`, `reference_template_cleanup.json`, `submission_package.json`, `insert_config.json`. Read `docs/prompts/prompt_driven_decisions.md` before writing.
+10. **Visual review** per `docs/prompts/visual_review_rules.md`. Set `ai_visual_review_completed` / `diagram_visual_review_completed` only after passing.
+11. **Validate**: `python scripts/run_workflow.py validate --workflow <workflow.json>`. 🔴 **STOP if errors** — fix before continuing.
+12. **Probe upstream** (if AI images): `python scripts/generate_images.py --check`. 🔴 **STOP if fails** — retry or switch routes.
+13. **Generate images**: `python scripts/run_workflow.py images --workflow <workflow.json>`.
+14. **Process video** (if needed): `python scripts/run_workflow.py video --workflow <workflow.json>`.
+15. **Package submission** (if needed): `python scripts/run_workflow.py package --workflow <workflow.json>`.
+16. **Fill DOCX**: `python scripts/run_workflow.py run --workflow <workflow.json>`. 🔴 **STOP — inspect output**. Check for: leftover placeholders, broken TOC, agent-voice, template instructions as body text, missing images.
+17. **Delivery review**: list every required deliverable, check each for correctness. Write `delivery_review.json`. 🔴 **STOP — user sign-off**.
 
 ## Files created by init_run.py
 
@@ -241,7 +271,7 @@ Do not use diagram assets for:
 - `requirement_checklist.json`
 - `requirement_analysis.json`
 - `pre_task_plan.json`
-- `配文.md`
+- `copywriting.md`
 - `prompt_config.json`
 - `browser_capture_plan.json`
 - `diagram_plan.json`
@@ -251,72 +281,74 @@ Do not use diagram assets for:
 - `insert_config.json`
 - `task_scripts/*.py`
 
-## Requirement checklist contract
+## JSON contracts
 
-`requirement_checklist.json` should be completed before report writing. At minimum it should record:
-- whether a grading rubric exists
-- target tier
-- run mode
-- whether a pre-task is required
-- whether images are required
-- whether AI images are required
-- whether browser capture is required
-- whether diagram assets are required
-- whether video evidence is required
-- whether reference-template cleanup is required
-- whether submission packaging is required
-- whether AI visual review has been completed
-- whether diagram visual review has been completed
-- the minimum planned image count
-- which headings or anchors will receive figures
-- which route each figure uses
+### requirement_checklist.json
 
-If the checklist says AI images are required, `prompt_config.json` must be populated.
-If the checklist says browser capture is required, `browser_capture_plan.json` must be populated.
-If the checklist says diagram assets are required, `diagram_plan.json` must be populated.
-If video evidence is required, `video_plan.json` must be populated and `video_review_completed` must not be set to `true` until the generated analysis/recording has been inspected.
-If a filled reference document is being converted into a blank template, populate `reference_template_cleanup.json` and follow `docs/prompts/reference_template_cleanup_rules.md`.
-If the checklist says a submission package is required, populate `submission_package.json` from the prompt/requirement, follow `docs/prompts/submission_package_rules.md`, and ensure the final archive name is `submit.zip`.
-If the checklist says a pre-task is required, `pre_task_plan.json` must be enabled, completed, and contain usable outputs.
-If AI images are required, `ai_visual_review_completed` must not be set to `true` until the agent has visually inspected the generated images.
-If diagram assets are required, `diagram_visual_review_completed` must not be set to `true` until the agent has visually inspected routing and layout quality.
-`配文.md` and `insert_config.json` must reflect all enabled routes and any required pre-task outputs.
-If the report contains code/project deliverables from a pre-task, `pre_task_plan.json` must identify where the runnable deliverables, README/start instructions, and verification evidence live.
+Complete before report writing. Must record: `has_grading_rubric`, `target_tier`, `run_mode`, `pre_task_required`, `images_required`, `ai_images_required`, `browser_capture_required`, `diagram_assets_required`, `video_required`, `reference_template_cleanup_required`, `submission_package_required`, `ai_visual_review_completed`, `diagram_visual_review_completed`, `minimum_image_count`, `planned_figures`.
 
-## Requirement analysis contract
+Cross-rules:
+- `ai_images_required=true` → `prompt_config.json` must be populated
+- `browser_capture_required=true` → `browser_capture_plan.json` must be populated
+- `diagram_assets_required=true` → `diagram_plan.json` must be populated
+- `video_required=true` → `video_plan.json` must be populated, `video_review_completed` must be `true`
+- `submission_package_required=true` → `submission_package.json` must be populated, output must be both `submit/` folder and `submit.zip`
+- `pre_task_required=true` → `pre_task_plan.json` must be enabled and completed
+- `ai_visual_review_completed` and `diagram_visual_review_completed` must only be `true` after agent has visually inspected the images
 
-`requirement_analysis.json` is the prompt-driven decision record.
+### requirement_analysis.json
 
-- Fill it after reading the requirement, template, and project artifacts.
-- Treat it as the source of truth for semantic decisions.
-- Use `requirement_checklist.json` as the execution-facing summary that scripts validate later.
-- If execution flags are enabled in the checklist, `requirement_analysis.json -> decision_summary` must explain why.
-- It must explicitly record why a pre-task is or is not required, which concrete outputs are mandatory, and why each visual route was chosen.
+The agent's decision record. Fill after reading requirement, template, and project artifacts. Source of truth for semantic decisions. Must explain why each route was chosen and why pre-task is or is not required.
 
-## Verification expectations
+### delivery_review.json
 
-Validation should confirm:
-- the image count is consistent across placeholders and configs
-- route planning exists when required
-- pre-task outputs exist when the assignment depends on them
-- AI prompts are used only for allowed scopes
-- AI screenshot batches keep a coherent background/environment unless variation is explicitly required
-- AI screenshots keep only necessary information and avoid excessive density
-- AI screenshots do not silently expose `localhost`, `127.0.0.1`, or browser/dev chrome when not required
-- AI screenshots pass a visual review for readability and realism
-- browser capture is used only for allowed scopes
-- diagram assets are used only for allowed scopes
-- diagram assets pass a visual review for routing, spacing, readability, and overlap-free labeling
-- video plans contain explicit input/output paths and reviewed analysis or recording outputs when required
-- reference-template cleanup preserves cover/front matter and keeps level-1/level-2 headings while removing filled body content
-- submission packaging derives included files from the requirement and writes `submit.zip`
-- frontend/self-built app screenshots are not silently routed through AI prompts
-- the final report is not pure-text when the rubric expects visual evidence
-- the report preserves the template shell
-- the final report uses student-perspective wording instead of agent-perspective wording
-- template instructions, placeholder text, and unused sample content are removed from the final report
-- any required code/project deliverable has startup instructions and verification evidence
-- final delivery review checked every required deliverable against the requirement instead of only checking file existence
+Machine-checkable final acceptance record. Every required deliverable must appear with `present`, `correct`, and `notes` fields. `overall_pass` must be `true` only if every item passes.
+
+```json
+{
+  "review_completed": true,
+  "requirement_deliverables": [
+    {
+      "id": "D1",
+      "description": "Final report (.docx)",
+      "required": true,
+      "present": true,
+      "correct": true,
+      "notes": ""
+    }
+  ],
+  "issues_found": [],
+  "overall_pass": true,
+  "reviewer_notes": ""
+}
+```
+
+## Verification checklist
+
+Validation must confirm:
+- Image count consistent across placeholders and configs
+- Route planning exists when required
+- Pre-task outputs exist when assignment depends on them
+- AI prompts used only for allowed scopes
+- AI screenshots: coherent background, low density, no localhost, real time, real project code
+- AI failures not silently replaced with fake screenshots
+- Upstream probed before batch generation
+- Browser capture used only for local frontend/app pages
+- Diagram assets used only for diagrams/flowcharts/ER
+- Diagram visual review passed for routing, spacing, readability
+- Video plans have explicit I/O paths and reviewed outputs
+- Reference-template cleanup preserves cover/headings, removes body content
+- Submission includes both `submit/` folder and `submit.zip`, named `submit.zip` without suffixes
+- Frontend screenshots not routed through AI prompts
+- Report not pure-text when rubric expects figures
+- Template shell preserved
+- Student voice, not agent voice
+- Template instructions, placeholders, format reminders removed
+- Code deliverables have startup instructions and verification
+- Delivery review checked every deliverable against requirement
+- `delivery_review.json` written
+- Frontend code has no placeholder text
+- Vendor skills applied for frontend pre-tasks
 
 ## Examples
 

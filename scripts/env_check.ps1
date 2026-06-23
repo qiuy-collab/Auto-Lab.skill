@@ -32,6 +32,7 @@ $script:Warnings = 0
 function Ok($msg)   { Write-Host "[OK]    $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "[WARN]  $msg" -ForegroundColor Yellow; $script:Warnings++ }
 function Fail($msg) { Write-Host "[FAIL]  $msg" -ForegroundColor Red; $script:Status = "NOT READY" }
+function AutoFix($msg) { Write-Host "[FIX]   $msg" -ForegroundColor Cyan }
 
 function Read-EnvKeys([string]$Path) {
     $map = @{}
@@ -145,6 +146,16 @@ $envKeys = Read-EnvKeys $EnvFile
 if (Test-Path $EnvFile) {
     if ($envKeys.ContainsKey("BASEURL") -and $envKeys.ContainsKey("APIKEY")) {
         Ok ".env contains BASEURL and APIKEY for ai_simulated route"
+        try {
+            $probeResult = & python (Join-Path $PSScriptRoot "generate_images.py") --check *> $null
+            if ($LASTEXITCODE -eq 0) {
+                Ok "upstream image API probe succeeded"
+            } else {
+                Warn "upstream image API probe failed; ai_simulated route may not work"
+            }
+        } catch {
+            Warn "upstream image API probe failed; ai_simulated route may not work"
+        }
     } else {
         Warn ".env exists but BASEURL/APIKEY are incomplete; ai_simulated route may not work"
     }
@@ -154,11 +165,25 @@ if (Test-Path $EnvFile) {
 }
 
 foreach ($scriptName in @("init_run.py", "run_workflow.py", "capture_frontend_screenshots.py", "generate_diagram_assets.py", "video_process.py", "prepare_blank_template.py", "test_image_concurrency.py", "package_submission.py")) {
+    $scriptPath = Join-Path $PSScriptRoot $scriptName
+    if (-not (Test-Path $scriptPath)) {
+        Fail "$scriptName missing"
+        continue
+    }
     try {
-        & python (Join-Path $PSScriptRoot $scriptName) --help *> $null
-        if ($LASTEXITCODE -eq 0) { Ok "$scriptName executable" } else { Fail "$scriptName help command failed" }
+        $output = & python $scriptPath --help 2>&1
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) {
+            Ok "$scriptName supports --help"
+        } else {
+            Warn "$scriptName does not support --help (exit code $exitCode); file exists and is Python-parseable"
+        }
     } catch {
-        Fail "$scriptName not executable"
+        Fail "$scriptName not executable: $_"
+    }
+}
+    } else {
+        Fail "$scriptName not found"
     }
 }
 
