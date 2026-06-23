@@ -56,10 +56,7 @@
       gap: 16px;
     }
 
-    .logo {
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
+    .logo { font-weight: 800; letter-spacing: -0.02em; }
 
     .nav-links {
       display: flex;
@@ -69,10 +66,7 @@
       font-size: 14px;
     }
 
-    .nav-links a {
-      text-decoration: none;
-    }
-
+    .nav-links a { text-decoration: none; }
     .nav-links a:hover { color: var(--text); }
 
     .hero {
@@ -184,7 +178,7 @@
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 14px;
     }
 
@@ -196,16 +190,8 @@
       box-shadow: var(--shadow);
     }
 
-    .card h3 {
-      margin: 0 0 8px;
-      font-size: 20px;
-    }
-
-    .card p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 15px;
-    }
+    .card h3 { margin: 0 0 8px; font-size: 20px; }
+    .card p { margin: 0; color: var(--muted); font-size: 15px; }
 
     .showcase {
       display: grid;
@@ -261,15 +247,17 @@
       background: rgba(6, 182, 212, 0.08);
     }
 
-    .repo-tree {
-      color: #cbd5e1;
-    }
+    .repo-tree { color: #cbd5e1; }
 
     footer {
       padding: 32px 0 48px;
       color: var(--muted);
       text-align: center;
       border-top: 1px solid var(--line);
+    }
+
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
     }
 
     @media (max-width: 860px) {
@@ -315,7 +303,7 @@
       <div class="wrap">
         <div class="section-head">
           <h2>已用 skills 验证过哪些领域</h2>
-          <p>不是空写介绍，下面这些方向已经按 skill 流程跑过或整理过。</p>
+          <p>下面这些方向已经按 skill 跑过或整理过。</p>
         </div>
         <div class="grid">
           <div class="card"><h3>数据分析实验报告</h3><p>数据生成、清洗、分析、图表输出、报告整理。</p></div>
@@ -323,6 +311,8 @@
           <div class="card"><h3>Python / Java / Web</h3><p>代码、运行结果、页面截图和课程设计报告。</p></div>
           <div class="card"><h3>管理系统课程设计</h3><p>模块设计、系统说明、运行效果和提交文件。</p></div>
           <div class="card"><h3>数据库设计</h3><p>ER 图、流程图、表结构和实验报告整理。</p></div>
+          <div class="card"><h3>答辩 PPT / 课程汇报 PPT</h3><p>按汇报逻辑整理内容，生成可继续改的演示稿。</p></div>
+          <div class="card"><h3>实操视频自动录制</h3><p>录制操作过程，整理成实验演示或提交材料。</p></div>
           <div class="card"><h3>Word 模板填写</h3><p>保留模板结构，插图、图注、正文和提交包一起处理。</p></div>
         </div>
       </div>
