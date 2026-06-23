@@ -2,7 +2,7 @@
 
 # AutoLab.skill
 
-**五分钟帮你搞定复杂的实验报告。**
+**把报告的活交给 Agent，珍惜时间。**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-2.0-blue.svg)](#)
