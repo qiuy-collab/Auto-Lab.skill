@@ -8,4 +8,4 @@ Thumbs.db
 .setup.log
 task_runs/
 output/
-vendor/ffmpeg/
+vendor/*/
