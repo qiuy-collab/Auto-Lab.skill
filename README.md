@@ -1,8 +1,8 @@
 <div align="center">
 
-# autolab.skill
+# AutoLab.skill
 
-**把作业要求、Word 模板、截图和提交包整理成一套可跑的报告流程。**
+**把作业要求、Word 模板、截图和提交包整理成可交付的报告文件。**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-2.0-blue.svg)](#)
@@ -17,12 +17,6 @@
 学校发的 Word 模板不好填。  
 截图、流程图、ER 图、运行结果也要整理。  
 最后还要调格式、清占位符、打包提交。
-
-`autolab.skill` 就是把这些步骤固定下来，让 AI Agent 按流程做报告。
-
-```text
-作业要求 → 分析要求 → 准备材料 → 填 Word → 检查 → 打包
-```
 
 ---
 
