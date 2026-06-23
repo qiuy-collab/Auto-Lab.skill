@@ -1,6 +1,6 @@
 <div align="center">
 
-# AutoLab.skill
+# Auto-Lab.skill
 
 **把报告的活交给 Agent，珍惜时间。**
 
@@ -148,6 +148,21 @@ Auto-Lab.skill/
     ├── frontend-design/
     └── webapp-testing/
 ```
+
+---
+
+## 参与改进
+
+这个 skill 还会继续补场景、补示例、补自动化流程。
+
+欢迎：
+
+- 提 Issue：反馈跑不通的地方、报告场景、模板适配问题。
+- 提 PR：补充脚本、示例、文档、截图生成配置。
+- 补案例：课程设计、答辩 PPT、实操视频、数据库实验、Linux 实验都可以。
+- 改文案：README、GitHub Page、提示词都欢迎继续改。
+
+觉得有用的话，也可以顺手点个 Star。
 
 ---
 
