@@ -63,6 +63,26 @@ https://github.com/qiuy-collab/Auto-Lab.skill
 
 ---
 
+## .env 配置
+
+需要用生图脚本时，在仓库根目录放一个 `.env`：
+
+```env
+BASEURL=https://your-image-api-base.example.com
+APIKEY=your_api_key_here
+```
+
+`BASEURL` 填生图接口的请求地址，脚本会请求：
+
+```text
+{BASEURL}/v1/images/generations
+```
+
+`APIKEY` 填对应接口的 Key。  
+推荐上游模型：`gpt-image-2`。
+
+---
+
 ## 运行效果
 
 这里放的是一个《大数据处理技术》课程大作业示例。
