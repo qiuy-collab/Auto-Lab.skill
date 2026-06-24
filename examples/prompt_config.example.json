@@ -2,9 +2,12 @@
   "total_count": 4,
   "resolution": "2048x1152",
   "output_dir": ".\\output\\generated_images",
+  "upstream_count": 1,
+  "upstream_index": 0,
   "max_workers": 16,
   "max_retries": 3,
   "retry_delay": 2,
+  "timeout": 180,
   "image_policy": {
     "default_mode": "screenshot_strict",
     "auto_append_negative": true,

@@ -306,6 +306,8 @@ def main():
         "retry_delay": 2,
         "concurrency_source": "bootstrap_default_until_agent_runs_test_image_concurrency",
         "concurrency_report": str((output_dir / "image_concurrency_report.json").resolve()),
+        "upstream_mode": "single",
+        "upstream_count": 1,
         "image_policy": {
             "default_mode": "screenshot_strict",
             "auto_append_negative": True,

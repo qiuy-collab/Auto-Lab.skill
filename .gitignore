@@ -8,5 +8,7 @@ Thumbs.db
 .setup.log
 task_runs/
 output/
+generated_images/
+conversations/
 vendor/*/**
 !vendor/**/.gitkeep

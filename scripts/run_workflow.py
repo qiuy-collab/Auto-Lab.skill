@@ -508,25 +508,97 @@ def update_insert_config_from_diagram_plan(workflow, diagram_plan, insert_config
     save_json(Path(workflow["insert_config_path"]), insert_config)
 
 
+def run_prompt_validation(workflow):
+    """Validate prompt_config.json using Agnes AI before generating images."""
+    root = Path(__file__).resolve().parent
+    prompt_config_path = Path(workflow["prompt_config_path"])
+    validator_script = root / "validate_prompt.py"
+
+    if not validator_script.exists():
+        print("[WARN] validate_prompt.py not found — skipping prompt validation")
+        return True
+
+    print("=== Prompt JSON validation (Agnes AI) ===")
+    result = subprocess.run(
+        [sys.executable, str(validator_script), "--config", str(prompt_config_path)],
+        capture_output=True, text=True
+    )
+
+    print(result.stdout.strip())
+    if result.stderr:
+        print(result.stderr.strip())
+
+    if result.returncode != 0:
+        print(
+            "[STRICT FAIL] Prompt validation found critical issues.\n"
+            "Fix the issues in prompt_config.json before generating images.\n"
+            "Run validate_prompt.py --fix to auto-apply suggested corrections,\n"
+            "or manually edit prompt_config.json and re-validate."
+        )
+        return False
+
+    print("Prompt validation passed.")
+    return True
+
+
 def run_generate_py(workflow):
     root = Path(__file__).resolve().parent
     prompt_config_path = Path(workflow["prompt_config_path"])
 
-    # B7: Test upstream before batch
-    print("Testing upstream image generation capability...")
+    # B6: Validate prompt JSON before upstream check
+    if not run_prompt_validation(workflow):
+        raise SystemExit(
+            "[STRICT FAIL] Prompt validation must pass before image generation.\n"
+            "Fix prompt_config.json and re-run: python scripts/validate_prompt.py --config <path>"
+        )
+
+    # B7: Test upstream before batch — STRICT, no silent fallback
+    print("=== Upstream connectivity check ===")
     check_result = subprocess.run(
         [sys.executable, str(root / "generate_images.py"), "--check"],
         capture_output=True, text=True
     )
+
+    check_output = (check_result.stderr or "").strip() + "\n" + (check_result.stdout or "").strip()
+
     if check_result.returncode != 0:
+        print(check_output)
         raise SystemExit(
-            "Upstream image generation is not available. "
-            "Fix the API connection before running batch generation.\n"
-            f"Error: {check_result.stderr or check_result.stdout}"
+            "[STRICT FAIL] Upstream image generation is NOT available.\n"
+            "\n"
+            "The agent MUST NOT silently fall back to other routes (diagram_assets, text-only).\n"
+            "Action required:\n"
+            "  1. Check .env BASEURL/APIKEY configuration\n"
+            "  2. Run: python scripts/generate_images.py --check\n"
+            "  3. Fix the upstream API connection\n"
+            "  4. Only proceed after upstream check passes\n"
+            "\n"
+            "If you genuinely need to use a different evidence route, update\n"
+            "requirement_checklist.json first and get user approval."
         )
+
+    print(check_output)
     print("Upstream check passed, starting batch generation...")
 
-    subprocess.run([sys.executable, str(root / "generate_images.py"), "--config", str(prompt_config_path)], check=True)
+    # Run batch generation with strict failure handling
+    result = subprocess.run(
+        [sys.executable, str(root / "generate_images.py"), "--config", str(prompt_config_path)],
+        capture_output=True, text=True
+    )
+
+    gen_output = (result.stdout or "").strip() + "\n" + (result.stderr or "").strip()
+    print(gen_output)
+
+    if result.returncode != 0:
+        raise SystemExit(
+            "[STRICT FAIL] Batch image generation failed.\n"
+            "Do NOT silently fall back to other routes.\n"
+            "Action required:\n"
+            "  1. Review the error output above\n"
+            "  2. Fix the failed prompts in prompt_config.json\n"
+            "  3. Or fix upstream API configuration in .env\n"
+            "  4. Re-run after fixing the root cause"
+        )
 
 
 def run_browser_capture(workflow):
@@ -879,6 +951,18 @@ def gate_evidence(workflow: dict, checklist: dict, requirement_analysis: dict) -
                 )
             if not prompt_config.get("global_prompt", "").strip():
                 warnings.append("[Gate 3/T] prompt_config.json.global_prompt 为空，建议填写统一环境描述")
+            # Check for prompt lint errors
+            prompt_lint_errors = lint_prompt_config(prompt_config)
+            if prompt_lint_errors:
+                for err in prompt_lint_errors:
+                    errors.append(f"[Gate 3/T] prompt lint: {err}")
+            # Check that prompt validation has been run (look for validation report)
+            validation_report = output_dir / "prompt_validation_report.json"
+            if not validation_report.exists():
+                warnings.append(
+                    "[Gate 3/T] 未找到 prompt_validation_report.json，"
+                    "建议运行: python scripts/validate_prompt.py --config prompt_config.json"
+                )
 
     # U: 浏览器截图路线
     if bool(checklist.get("browser_capture_required", False)):
@@ -1319,7 +1403,7 @@ def run_gates(workflow: dict, phase: str = "all") -> int:
 
         title, gate_func = _GATES[ph]
         print(f"\n{'─' * 60}")
-        print(f"🚪 Gate {ph}: {title}")
+        print(f"[Gate {ph}] {title}")
         print(f"{'─' * 60}")
 
         try:
@@ -1337,17 +1421,17 @@ def run_gates(workflow: dict, phase: str = "all") -> int:
             passed, errs, warns = False, [f"Gate {ph} 执行异常: {e}"], []
 
         for w in warns:
-            print(f"  ⚠️  {w}")
+            print(f"  [WARN]  {w}")
             total_warnings += 1
 
         for e in errs:
-            print(f"  ❌ {e}")
+            print(f"  [FAIL] {e}")
             total_errors += 1
 
         if passed:
-            print(f"  ✅ Gate {ph} 通过")
+            print(f"  [PASS] Gate {ph} 通过")
         else:
-            print(f"  🚫 Gate {ph} 未通过 — 后续阶段将跳过")
+            print(f"  [SKIP] Gate {ph} 未通过 — 后续阶段将跳过")
             any_fatal = True
             if phase == "all":
                 print(f"  (跳过 Gate {int(ph)+1}~6，请修复后重新运行)")
@@ -1356,14 +1440,14 @@ def run_gates(workflow: dict, phase: str = "all") -> int:
     print(f"\n{'=' * 60}")
     print(f"汇总: {total_errors} 错误, {total_warnings} 警告")
     if any_fatal:
-        print("状态: 🚫 未通过 — 请修复上方错误后重新运行 gate")
+        print("状态: [SKIP] 未通过 — 请修复上方错误后重新运行 gate")
         print("=" * 60)
         return 1
     else:
         if total_warnings > 0:
-            print("状态: ✅ 通过 (有警告)")
+            print("状态: [PASS] 通过 (有警告)")
         else:
-            print("状态: ✅ 全部通过")
+            print("状态: [PASS] 全部通过")
         print("=" * 60)
         return 0
 

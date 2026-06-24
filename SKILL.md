@@ -62,11 +62,12 @@ pip install requests python-docx Pillow
 5. If pre-task needed → complete it → record in pre_task_plan.json
 6. Plan figures → write copywriting.md + prompt_config.json + insert_config.json
 7. python scripts/run_workflow.py gate --workflow <workflow.json>
-8. python scripts/generate_images.py --check (if AI images needed)
-9. python scripts/run_workflow.py images --workflow <workflow.json>
-10. python scripts/run_workflow.py run --workflow <workflow.json>
-11. 🔴 STOP — inspect output DOCX
-12. Write delivery_review.json → 🔴 STOP — user sign-off
+8. python scripts/validate_prompt.py --config <output_dir>/prompt_config.json (REQUIRED if AI images)
+9. python scripts/generate_images.py --check (if AI images needed)
+10. python scripts/run_workflow.py images --workflow <workflow.json>
+11. python scripts/run_workflow.py run --workflow <workflow.json>
+12. 🔴 STOP — inspect output DOCX
+13. Write delivery_review.json → 🔴 STOP — user sign-off
 ```
 
 ## Core behavior
@@ -186,10 +187,9 @@ When to regenerate:
 - localhost or dev URLs are visible
 - UI elements are obviously broken
 
-When to skip and use text instead:
-- 2+ regeneration attempts still fail
-- The figure is not critical to a scoring item
-- Text description can substitute without losing points
+**STRICT RULE**: After 2 regeneration rounds, if quality still fails, DO NOT silently skip or use text instead. Report the specific failure to the user and ask them to:
+1. Revise the prompt in `prompt_config.json` to address the issue, OR
+2. Explicitly approve skipping this image.
 
 ### User communication at checkpoints
 
@@ -199,7 +199,7 @@ Each 🔴 STOP point has a specific display format:
 |-----------|----------------------|-----------------|
 | After requirement analysis | The filled `requirement_analysis.json` + `requirement_checklist.json` summary: routes chosen, pre-task yes/no, figure count, packaging scope | "确认" or corrections |
 | After validation errors | The specific error messages from `run_workflow.py validate` | User acknowledgment or file fixes |
-| After upstream probe failure | The error from `generate_images.py --check` + proposed fallback plan | User approval to switch routes |
+| After upstream probe failure | The error from `generate_images.py --check` + exact fix instruction (which config to correct) | User fixes upstream config — NO fallback proposal |
 | After DOCX output inspection | A bullet list of what was checked and what passed/failed | User approval to proceed to packaging |
 | After delivery review | The `delivery_review.json` content | Final sign-off |
 
@@ -265,7 +265,8 @@ flowchart TD
     I -->|Browser| K["Write browser_capture_plan.json"]
     I -->|Diagram| L["Write diagram_plan.json"]
     I -->|Video| M["Write video_plan.json"]
-    J --> N["Probe upstream → generate AI images"]
+    J --> N0["Validate prompt_config.json (Agnes AI)"]
+    N0 --> N["Probe upstream → generate AI images"]
     K --> O["Run app + capture screenshots"]
     L --> P["Generate diagram assets"]
     M --> Q["Process video"]
@@ -294,9 +295,11 @@ flowchart TD
 | `.env` missing or incomplete | No `BASEURL`/`APIKEY` | Copy `.env.example` to `.env` | Ask user to fill API key |
 | `env_check.ps1` reports FAIL | Missing module or tool | Auto-install the missing dependency | Report exact fix command to user |
 | `init_run.py` error | Template not `.docx` / path missing | Check file path and format, retry | Ask user to confirm file |
-| Upstream image API unreachable | `--check` returns failure | Wait 30s, retry once | Skip `ai_simulated`, use `diagram_assets` or text-only |
-| Single AI image fails | API timeout / empty response | Auto-retry 3 times (built into script) | Record failed image name, continue others, note in copywriting.md |
-| Visual review fails | localhost in image / density too high / overlaps | Revise prompt, regenerate | Skip that image, describe in text instead |
+| Upstream image API unreachable | `--check` returns failure | Report error to user with diagnostic info — DO NOT silently fall back | **No silent fallback allowed.** User must fix API config or explicitly approve route switch |
+| Single AI image fails | API timeout / empty response | Auto-retry 3 times (built into script) | Record failed image name; if >50% fail, abort and tell user to fix upstream |
+| **ALL AI images fail** | All retries exhausted | **Raise SystemExit — stop immediately** | **FORBIDDEN: do not fall back to diagram_assets or text-only without explicit user approval** |
+| Visual review fails | localhost in image / density too high / overlaps | Revise prompt, regenerate (max 2 rounds) | If still fails after 2 rounds, ask user to review and decide whether to keep or regenerate |
+| Prompt validation fails | Prompt contains forbidden terms or is inconsistent | **Report issues to user, do not proceed** | User must fix prompt_config.json before generation
 | Template fill script errors | `task_scripts/*.py` exception | Check if stub was replaced, fix paths | Fall back to `python-docx` simple fill, record reason in `requirement_analysis.json -> template_strategy.notes` |
 | Video processing fails | PyAV/OpenCV both unavailable | Check ffmpeg installation | Skip video evidence, set `video_required=false` in checklist |
 | Submission packaging fails | Files in `include_paths` don't exist | Check paths, fix `submission_package.json` | Stop, ask user to confirm files |
@@ -376,7 +379,8 @@ Do not use diagram assets for:
 - AI-generated screenshots with clock/time displays must show the **real current time**. Note the current date/time before generating and include it in the prompt.
 - AI-generated code/IDE screenshots should use the **project's actual source code**. Pick the most representative snippet (main entry point, key class, or core logic) and include it in the prompt for visual fidelity.
 - If AI image generation fails, do NOT fall back to local fake screenshots. Retry, skip, or switch routes.
-- Before batch AI image generation, always probe upstream first: `python scripts/generate_images.py --check`
+- Before batch AI image generation, always validate prompts: `python scripts/validate_prompt.py --config <output_dir>/prompt_config.json`
+- After prompt validation passes, probe upstream: `python scripts/generate_images.py --check`
 
 ## Template filling rules
 
@@ -434,12 +438,73 @@ When implementing frontend code as a pre-task:
 9. **Write config files** as one coordinated set: `copywriting.md`, `prompt_config.json`, `browser_capture_plan.json`, `diagram_plan.json`, `video_plan.json`, `reference_template_cleanup.json`, `submission_package.json`, `insert_config.json`. Read `docs/prompts/prompt_driven_decisions.md` before writing.
 10. **Visual review** per `docs/prompts/visual_review_rules.md`. Set `ai_visual_review_completed` / `diagram_visual_review_completed` only after passing.
 11. **Validate**: `python scripts/run_workflow.py validate --workflow <workflow.json>`. 🔴 **STOP if errors** — fix before continuing.
-12. **Probe upstream** (if AI images): `python scripts/generate_images.py --check`. 🔴 **STOP if fails** — retry or switch routes.
-13. **Generate images**: `python scripts/run_workflow.py images --workflow <workflow.json>`.
-14. **Process video** (if needed): `python scripts/run_workflow.py video --workflow <workflow.json>`.
-15. **Package submission** (if needed): `python scripts/run_workflow.py package --workflow <workflow.json>`.
-16. **Fill DOCX**: `python scripts/run_workflow.py run --workflow <workflow.json>`. 🔴 **STOP — inspect output**. Check for: leftover placeholders, broken TOC, agent-voice, template instructions as body text, missing images.
-17. **Delivery review**: list every required deliverable, check each for correctness. Write `delivery_review.json`. 🔴 **STOP — user sign-off**.
+12. **Validate prompts** (if AI images): `python scripts/validate_prompt.py --config <output_dir>/prompt_config.json`. 🔴 **STOP if fails** — fix prompt_config.json.
+13. **Probe upstream** (if AI images): `python scripts/generate_images.py --check`. 🔴 **STOP if fails** — fix upstream config, do NOT fall back.
+14. **Generate images**: `python scripts/run_workflow.py images --workflow <workflow.json>`.
+15. **Process video** (if needed): `python scripts/run_workflow.py video --workflow <workflow.json>`.
+16. **Package submission** (if needed): `python scripts/run_workflow.py package --workflow <workflow.json>`.
+17. **Fill DOCX**: `python scripts/run_workflow.py run --workflow <workflow.json>`. 🔴 **STOP — inspect output**. Check for: leftover placeholders, broken TOC, agent-voice, template instructions as body text, missing images.
+18. **Delivery review**: list every required deliverable, check each for correctness. Write `delivery_review.json`. 🔴 **STOP — user sign-off**.
+
+## Multi-upstream parallel generation
+
+When generating many AI images, distribute work across multiple upstream API providers to reduce total time.
+
+### Configuration
+
+**`.env`** — comma-separated mode (recommended):
+```env
+BASEURLS:https://api1.example.com,https://api2.example.com
+APIKEYS:sk-key1,sk-key2
+```
+
+Or numbered mode:
+```env
+BASEURL1:https://api1.example.com
+APIKEY1:sk-key1
+BASEURL2:https://api2.example.com
+APIKEY2:sk-key2
+```
+
+**`prompt_config.json`** — key fields:
+```json
+{
+  "upstream_count": 2,
+  "max_workers": 4,
+  "max_retries": 3,
+  "timeout": 180,
+  "images": [...]
+}
+```
+
+### Sharding logic
+
+Each upstream gets `index % upstream_count == upstream_index` of the images:
+
+| Upstream | Images (8 total, 2 upstreams) |
+|----------|------------------------------|
+| 上游0 | img_1, img_3, img_5, img_7 |
+| 上游1 | img_2, img_4, img_6, img_8 |
+
+### Running
+
+```bash
+# Terminal 1 (upstream 0 → handles even-indexed images)
+python scripts/generate_images.py --config prompt_config.json --upstreams 2 --upstream 0
+
+# Terminal 2 (upstream 1 → handles odd-indexed images)
+python scripts/generate_images.py --config prompt_config.json --upstreams 2 --upstream 1
+
+# Single-upstream mode (backward compatible, no sharding)
+python scripts/generate_images.py --config prompt_config.json
+```
+
+### Expected performance
+
+- 8 images, 1 upstream: ~120 seconds
+- 8 images, 2 upstreams: ~60 seconds
+- 8 images, 3 upstreams: ~45 seconds
+- Scales near-linearly with upstream count (limited by `max_workers`)
 
 ## Files created by init_run.py
 
@@ -450,6 +515,7 @@ When implementing frontend code as a pre-task:
 - `pre_task_plan.json`
 - `copywriting.md`
 - `prompt_config.json`
+- `prompt_validation_report.json` (after validation)
 - `browser_capture_plan.json`
 - `diagram_plan.json`
 - `video_plan.json`

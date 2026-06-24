@@ -7,7 +7,7 @@ import threading
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple
 
 warnings.filterwarnings("ignore")
 
@@ -29,9 +29,10 @@ def skill_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def load_env_file():
+def load_env_file() -> dict:
+    """Load .env from skill root. Supports both single and multi-upstream modes."""
     env_path = skill_root() / ".env"
-    env_vars = {}
+    env_vars: dict = {}
     if not env_path.exists():
         return env_vars
 
@@ -48,6 +49,50 @@ def load_env_file():
 
 
 env_vars = load_env_file()
+
+
+def parse_upstreams() -> Tuple[List[str], List[str], int]:
+    """
+    Parse upstream API configurations from .env.
+    Returns (baseurls, apikeys, count).
+
+    Priority:
+    1. BASEURLS + APIKEYS (comma-separated multi-upstream)
+    2. BASEURL1/APIKEY1, BASEURL2/APIKEY2, ... (numbered multi-upstream)
+    3. BASEURL + APIKEY (single upstream, backward compatible)
+    """
+    # Mode 1: comma-separated
+    baseurls_csv = env_vars.get("BASEURLS", "").strip()
+    apikeys_csv = env_vars.get("APIKEYS", "").strip()
+    if baseurls_csv and apikeys_csv:
+        baseurls = [u.strip() for u in baseurls_csv.split(",") if u.strip()]
+        apikeys = [k.strip() for k in apikeys_csv.split(",") if k.strip()]
+        count = min(len(baseurls), len(apikeys))
+        if count > 0:
+            return baseurls[:count], apikeys[:count], count
+
+    # Mode 2: numbered (BASEURL1, APIKEY1, ...)
+    idx = 1
+    numbered_baseurls = []
+    numbered_apikeys = []
+    while True:
+        bu = env_vars.get(f"BASEURL{idx}", "").strip()
+        ak = env_vars.get(f"APIKEY{idx}", "").strip()
+        if not bu or not ak:
+            break
+        numbered_baseurls.append(bu)
+        numbered_apikeys.append(ak)
+        idx += 1
+    if numbered_baseurls:
+        return numbered_baseurls, numbered_apikeys, len(numbered_baseurls)
+
+    # Mode 3: single upstream (backward compatible)
+    single_url = env_vars.get("BASEURL", "").strip()
+    single_key = env_vars.get("APIKEY", "").strip()
+    if single_url and single_key:
+        return [single_url], [single_key], 1
+
+    return [], [], 0
 
 
 DEFAULT_POLICY = {
@@ -146,6 +191,9 @@ def generate_image_task(task_info):
     resolution = task_info["resolution"]
     max_retries = task_info.get("max_retries", 3)
     retry_delay = task_info.get("retry_delay", 2)
+    base_url = task_info.get("base_url")
+    api_key = task_info.get("api_key")
+    upstream_index = task_info.get("upstream_index")
     last_error = None
 
     for attempt in range(max_retries):
@@ -156,7 +204,10 @@ def generate_image_task(task_info):
                 output_dir=output_dir,
                 resolution=resolution,
                 filename=name,
-                silent=True
+                silent=True,
+                base_url=base_url,
+                api_key=api_key,
+                upstream_index=upstream_index,
             )
             if result:
                 safe_print(f"[{index}/{total}] [OK] {name}")
@@ -175,6 +226,13 @@ def generate_image_task(task_info):
 
 
 def resolve_output_dir(config_path: Path, configured_output_dir: Optional[str]) -> Path:
+    """Resolve output directory for generated images.
+
+    STRICT RULE: output_dir MUST be explicit in prompt_config.json.
+    Falls back to config parent ONLY when config_path is inside an init_run output dir
+    (i.e., when config is at <output_dir>/prompt_config.json).
+    NEVER falls back to CWD — this prevents workspace scattering.
+    """
     if configured_output_dir:
         output_path = Path(configured_output_dir).expanduser()
         if not output_path.is_absolute():
@@ -182,10 +240,35 @@ def resolve_output_dir(config_path: Path, configured_output_dir: Optional[str]) 
         else:
             output_path = output_path.resolve()
         return output_path
-    return (config_path.parent / "generated_images").resolve()
+
+    # Config resides inside a project output dir (init_run.py created it there).
+    # Use <output_dir>/generated_images as the default.
+    output_dir = config_path.parent / "generated_images"
+    # Verify this looks like a valid init_run output dir (has workflow.json alongside)
+    if (config_path.parent / "workflow.json").exists():
+        return output_dir.resolve()
+
+    # Config is NOT inside a proper run directory — refuse to guess
+    raise SystemExit(
+        f"prompt_config.json must have an explicit 'output_dir' field.\n"
+        f"Current config: {config_path}\n"
+        f"Expected: inside an init_run.py output directory with workflow.json.\n"
+        f"Fix: set 'output_dir' in prompt_config.json to the correct project images directory."
+    )
 
 
-def generate_from_config(config_path="examples/prompt_config.example.json"):
+def shard_tasks_for_upstream(tasks: list, upstream_index: int, upstream_count: int) -> list:
+    """
+    Distribute tasks across upstreams using modulo sharding.
+    tasks[i]["index"] % upstream_count == upstream_index
+    """
+    return [t for t in tasks if t["index"] % upstream_count == upstream_index]
+
+
+def generate_from_config(config_path="examples/prompt_config.example.json",
+                         upstream_index: Optional[int] = None,
+                         upstream_count: Optional[int] = None,
+                         timeout: Optional[int] = None):
     config_path = Path(config_path).expanduser().resolve()
     with config_path.open("r", encoding="utf-8") as handle:
         config = json.load(handle)
@@ -199,6 +282,19 @@ def generate_from_config(config_path="examples/prompt_config.example.json"):
     max_retries = config.get("max_retries", 3)
     retry_delay = config.get("retry_delay", 2)
     policy = normalize_policy(config)
+    config_timeout = config.get("timeout", 180)
+
+    # Determine upstream configuration
+    if upstream_count is None:
+        upstream_count = config.get("upstream_count", 1)
+    if upstream_index is None:
+        upstream_index = config.get("upstream_index", 0)
+    if timeout is None:
+        timeout = config_timeout
+
+    # Detect multi-upstream mode
+    baseurls, apikeys, env_upstream_count = parse_upstreams()
+    effective_upstream_count = max(upstream_count, env_upstream_count)
 
     safe_print("=== batch image generation ===")
     safe_print(f"config: {config_path}")
@@ -207,9 +303,22 @@ def generate_from_config(config_path="examples/prompt_config.example.json"):
     safe_print(f"workers: {max_workers}")
     safe_print(f"retries: {max_retries}")
     safe_print(f"output_dir: {output_dir}")
+    safe_print(f"upstream_mode: {'multi' if effective_upstream_count > 1 else 'single'}")
+    safe_print(f"upstream_count: {effective_upstream_count}")
+    if effective_upstream_count > 1:
+        safe_print(f"upstream_index: {upstream_index} (responsible for images where index % {effective_upstream_count} == {upstream_index})")
+    safe_print(f"timeout: {timeout}s")
     safe_print("-" * 50)
 
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Determine the upstream for this process instance
+    task_base_url = None
+    task_api_key = None
+    if baseurls and effective_upstream_count > 0:
+        idx = upstream_index % len(baseurls)
+        task_base_url = baseurls[idx]
+        task_api_key = apikeys[idx]
 
     tasks = []
     lint_errors = []
@@ -229,12 +338,24 @@ def generate_from_config(config_path="examples/prompt_config.example.json"):
                 "output_dir": str(output_dir),
                 "resolution": resolution,
                 "max_retries": max_retries,
-                "retry_delay": retry_delay
+                "retry_delay": retry_delay,
+                "base_url": task_base_url,
+                "api_key": task_api_key,
+                "upstream_index": upstream_index,
             }
         )
 
     if lint_errors and policy.get("fail_on_prompt_risk", True):
         raise SystemExit("Prompt lint failed:\n" + "\n".join(lint_errors))
+
+    # Shard tasks for this upstream instance
+    if effective_upstream_count > 1:
+        tasks = shard_tasks_for_upstream(tasks, upstream_index, effective_upstream_count)
+        safe_print(f"After sharding: {len(tasks)} task(s) assigned to upstream {upstream_index}")
+
+    if not tasks:
+        safe_print("No tasks assigned to this upstream instance. Exiting cleanly.")
+        return []
 
     safe_print(f"starting {len(tasks)} task(s)...")
     start_time = time.time()
@@ -268,19 +389,38 @@ def generate_from_config(config_path="examples/prompt_config.example.json"):
     safe_print(f"success: {success_count}/{len(tasks)}")
     safe_print(f"failed: {failed_count}/{len(tasks)}")
     safe_print(f"output_dir: {output_dir}")
+
+    # Strict mode: if ALL images failed, raise error instead of silently returning
+    if failed_count == len(tasks) and len(tasks) > 0:
+        safe_print("[FATAL] All image generation tasks failed — upstream is likely down.")
+        safe_print("Do NOT silently fall back. Fix the upstream API configuration first.")
+        raise SystemExit(f"All {failed_count} image generation tasks failed. Upstream API may be down.")
+
     return results
 
 
-def generate_image_single(prompt, output_dir=None, resolution="1024x1024", filename=None, silent=False):
+def generate_image_single(prompt, output_dir=None, resolution="1024x1024", filename=None, silent=False,
+                          base_url=None, api_key=None, upstream_index=None, timeout=120):
     resolution = normalize_resolution(resolution)
-    base_url = env_vars.get("BASEURL")
-    api_key = env_vars.get("APIKEY")
+
+    # Resolve upstream: explicit params > upstream_index from multi-upstream > .env single
+    if not base_url or not api_key:
+        baseurls, apikeys, count = parse_upstreams()
+        if upstream_index is not None and upstream_index < count:
+            base_url = baseurls[upstream_index]
+            api_key = apikeys[upstream_index]
+        elif count > 0:
+            base_url = baseurls[0]
+            api_key = apikeys[0]
+
     if not base_url or not api_key:
         if not silent:
             safe_print("Missing BASEURL or APIKEY in .env")
         return None
 
-    output_path = Path(output_dir).expanduser().resolve() if output_dir else (Path.cwd() / "generated_images").resolve()
+    if not output_dir:
+        raise SystemExit("output_dir is required for image generation — refusing to use CWD as fallback.")
+    output_path = Path(output_dir).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
 
     url = f"{base_url.rstrip('/')}/v1/images/generations"
@@ -300,9 +440,22 @@ def generate_image_single(prompt, output_dir=None, resolution="1024x1024", filen
         safe_print(f"Generating image with prompt: {prompt}")
         safe_print(f"API endpoint: {url}")
 
-    response = requests.post(url, headers=headers, json=data, timeout=120)
-    response.raise_for_status()
-    result = response.json()
+    try:
+        response = requests.post(url, headers=headers, json=data, timeout=timeout)
+        response.raise_for_status()
+        result = response.json()
+    except requests.exceptions.Timeout:
+        if not silent:
+            safe_print(f"[TIMEOUT] API request timed out after {timeout}s: {url}")
+        return None
+    except requests.exceptions.ConnectionError as exc:
+        if not silent:
+            safe_print(f"[CONNECT ERROR] Cannot reach API: {exc}")
+        return None
+    except requests.exceptions.HTTPError as exc:
+        if not silent:
+            safe_print(f"[HTTP ERROR] API returned error: {exc}")
+        return None
 
     if "data" not in result or not result["data"]:
         if not silent:
@@ -354,7 +507,7 @@ def generate_filename_from_prompt(prompt):
         "真实",
         "实验"
     }
-    chinese_chars = re.findall(r"[\u4e00-\u9fff]+", prompt)
+    chinese_chars = re.findall(r"[一-鿿]+", prompt)
     english_words = re.findall(r"[a-zA-Z]+", prompt)
 
     keywords = []
@@ -373,28 +526,68 @@ def generate_filename_from_prompt(prompt):
     filename = "_".join(keywords[:5])
     filename = re.sub(r"[^\w\-_]", "_", filename)
     filename = re.sub(r"_+", "_", filename).strip("_")
-    return f"{filename}_{int(time.time())}.png"
+    # Limit length to avoid filesystem issues
+    if len(filename) > 100:
+        filename = filename[:100]
+    return f"{filename}.png"
 
 
-def check_upstream():
+def check_upstream(upstream_index: int = 0, upstream_count: int = 1):
     """Test if the upstream image generation API is reachable."""
-    safe_print("=== upstream probe ===")
-    test_prompt = "generate a small dog image"
-    safe_print(f"Testing upstream connectivity with prompt: {test_prompt}")
-    result = generate_image_single(test_prompt, silent=True)
-    if result:
-        safe_print("[OK] Upstream image generation is available")
-        return True
-    else:
-        safe_print("[FAIL] Upstream image generation is NOT available")
+    baseurls, apikeys, count = parse_upstreams()
+    if not baseurls:
+        safe_print("[FAIL] No upstream configured in .env")
         return False
+
+    # Use a temp output dir inside skill root for probe tests (auto-cleaned)
+    probe_dir = skill_root() / ".probe_cache"
+    probe_dir.mkdir(exist_ok=True)
+
+    # Probe each upstream (or just the assigned one in multi mode)
+    indices = range(min(upstream_count, count)) if upstream_count > 1 else [0]
+    all_ok = True
+    for i in indices:
+        if i >= len(baseurls):
+            break
+        safe_print(f"Probing upstream {i}: {baseurls[i]}")
+        test_prompt = "generate a small dog image"
+        try:
+            result = generate_image_single(
+                test_prompt,
+                silent=True,
+                output_dir=str(probe_dir),
+                base_url=baseurls[i],
+                api_key=apikeys[i],
+                timeout=30
+            )
+            if result:
+                safe_print(f"  [OK] Upstream {i} is available")
+                # Clean up probe image
+                try:
+                    Path(result).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            else:
+                safe_print(f"  [FAIL] Upstream {i} returned empty result")
+                all_ok = False
+        except Exception as exc:
+            safe_print(f"  [FAIL] Upstream {i} connection error: {exc}")
+            all_ok = False
+
+    return all_ok
 
 
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser(
         description="GPT Image 2 batch generator for auto-lab.",
-        epilog="If --config is omitted, uses examples/prompt_config.example.json or runs a single test prompt."
+        epilog=(
+            "Multi-upstream mode:\n"
+            "  python generate_images.py --config prompt_config.json --upstreams 3\n"
+            "  python generate_images.py --config prompt_config.json --upstream 0\n"
+            "  python generate_images.py --config prompt_config.json --upstream 1\n"
+            "  python generate_images.py --config prompt_config.json --upstream 2\n"
+        )
     )
     parser.add_argument(
         "--config", "-c",
@@ -408,20 +601,19 @@ def parse_args():
         "--prompt", "-p",
         help="Single test prompt (used with --check or standalone test)"
     )
+    parser.add_argument(
+        "--upstream", "-u", type=int, default=None,
+        help="Specify which upstream to use (0-based index). Use with --upstreams for multi-upstream mode."
+    )
+    parser.add_argument(
+        "--upstreams", "-U", type=int, default=None,
+        help="Total number of upstreams for sharding. When > 1, tasks are distributed by index modulo upstreams."
+    )
+    parser.add_argument(
+        "--timeout", "-t", type=int, default=None,
+        help="Request timeout in seconds (default: 180 for multi-upstream, 120 for single)."
+    )
     return parser.parse_args()
-
-
-def check_upstream():
-    """Test if the upstream image generation API is reachable."""
-    test_prompt = "generate a small dog image"
-    safe_print(f"Testing upstream connectivity with prompt: {test_prompt}")
-    result = generate_image_single(test_prompt, silent=True)
-    if result:
-        safe_print("[OK] Upstream image generation is available")
-        return True
-    else:
-        safe_print("[FAIL] Upstream image generation is NOT available")
-        return False
 
 
 def main():
@@ -429,37 +621,82 @@ def main():
     args = parse_args()
 
     if args.check:
-        ok = check_upstream()
+        ok = check_upstream(
+            upstream_index=args.upstream or 0,
+            upstream_count=args.upstreams or 1
+        )
         raise SystemExit(0 if ok else 1)
 
     if args.prompt:
         safe_print(f"Test prompt: {args.prompt}")
-        result = generate_image_single(args.prompt)
+        probe_dir = skill_root() / ".probe_cache"
+        probe_dir.mkdir(exist_ok=True)
+        result = generate_image_single(args.prompt, output_dir=str(probe_dir))
         if result:
             safe_print(f"[SUCCESS] image saved: {result}")
         else:
             safe_print("[FAILED] image generation failed")
         return
 
-    if args.config:
-        config_path = args.config
-        safe_print(f"Using config file: {config_path}")
-        generate_from_config(config_path)
-        return
+    # Determine upstream mode
+    baseurls, apikeys, env_upstream_count = parse_upstreams()
+    config_upstream_count = 1
 
-    default_config = skill_root() / "examples" / "prompt_config.example.json"
-    if default_config.exists():
-        safe_print(f"Using config file: {default_config}")
-        generate_from_config(str(default_config))
-        return
+    if args.upstreams is not None:
+        config_upstream_count = args.upstreams
+    elif env_upstream_count > 1:
+        config_upstream_count = env_upstream_count
+    elif args.upstream is not None:
+        # User specified --upstream but not --upstreams, infer from config
+        config_upstream_count = max(env_upstream_count, 1)
 
-    test_prompt = "generate a small dog image"
-    safe_print(f"Test prompt: {test_prompt}")
-    result = generate_image_single(test_prompt)
-    if result:
-        safe_print("[SUCCESS] image generation succeeded")
-    else:
-        safe_print("[FAILED] image generation failed")
+    # In multi-upstream mode, --upstream is required
+    if config_upstream_count > 1 and args.upstream is None:
+        # Auto-detect: if only one upstream is specified, use it
+        if env_upstream_count == 1:
+            args.upstream = 0
+        else:
+            safe_print(
+                f"Multi-upstream mode detected ({config_upstream_count} upstreams). "
+                f"Specify --upstream N to select which upstream to use.\n"
+                f"Example: python generate_images.py --config prompt_config.json --upstreams {config_upstream_count} --upstream 0"
+            )
+            raise SystemExit(1)
+
+    timeout = args.timeout or 180 if config_upstream_count > 1 else 120
+
+    config_path = args.config
+    if not config_path:
+        # In batch mode, require explicit --config. Fall back to example ONLY for --check.
+        if args.check or args.prompt:
+            config_path = str(skill_root() / "examples" / "prompt_config.example.json")
+        else:
+            raise SystemExit(
+                "Batch image generation requires --config <path/to/prompt_config.json>.\n"
+                "The config should be in your init_run output directory.\n"
+                "Example: python generate_images.py --config output/my_project/prompt_config.json"
+            )
+    if not Path(config_path).exists():
+        default_config = skill_root() / "examples" / "prompt_config.example.json"
+        if default_config.exists():
+            config_path = str(default_config)
+        else:
+            test_prompt = "generate a small dog image"
+            safe_print(f"No config found, running test prompt: {test_prompt}")
+            result = generate_image_single(test_prompt)
+            if result:
+                safe_print("[SUCCESS] image generation succeeded")
+            else:
+                safe_print("[FAILED] image generation failed")
+            return
+
+    safe_print(f"Using config file: {config_path}")
+    generate_from_config(
+        config_path=config_path,
+        upstream_index=args.upstream or 0,
+        upstream_count=config_upstream_count,
+        timeout=timeout
+    )
 
 
 if __name__ == "__main__":
